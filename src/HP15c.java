@@ -4,7 +4,6 @@ import java.awt.event.KeyListener;
 import java.text.DecimalFormat;
 import java.util.HashMap;
 import java.util.LinkedList;
-import java.util.Optional;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
@@ -28,6 +27,8 @@ public class HP15c extends JFrame implements KeyListener {
     private DisplayMode displayMode;
     private int precision;
     private DecimalFormat displayFormatter;
+    private DecimalFormat fixFormatter;
+    private DecimalFormat scientificFormatter;
 
     private static final int XREG = 0;
     private static final int YREG = 1;
@@ -52,10 +53,12 @@ public class HP15c extends JFrame implements KeyListener {
         public abstract void input();
     }
 
-    private static String radixEntry = "#,##0.";
     private static String[] fixPatterns = {
             "#,##0.", "#,##0.0", "#,##0.00", "#,##0.000", "#,##0.0000",
             "#,##0.00000", "#,##0.000000", "#,##0.0000000", "#,##0.00000000", "#,##0.000000000"
+    };
+    private static String[] scientificPatterns = {
+            "stuff", "stuff", "stuff", "stuff"
     };
 
     public HP15c() {
@@ -65,7 +68,9 @@ public class HP15c extends JFrame implements KeyListener {
         this.stack = new double[4];
         this.displayMode = DisplayMode.FIX;
         this.precision = 2;
-        this.displayFormatter = new DecimalFormat(fixPatterns[precision]);
+        this.fixFormatter = new DecimalFormat(fixPatterns[precision]);
+        this.scientificFormatter = new DecimalFormat(scientificPatterns[precision]);
+        this.displayFormatter = this.fixFormatter;
         this.setDefaultCloseOperation(EXIT_ON_CLOSE);
         this.addKeyListener(this);
         this.add(display);
@@ -153,6 +158,26 @@ public class HP15c extends JFrame implements KeyListener {
 
     private String charLLtoString(LinkedList<Character> characterList) {
         return characterList.stream().map(String::valueOf).collect(Collectors.joining());
+    }
+
+    private String formatDisplay() {
+        var xReg = stack[XREG];
+        switch (displayMode) {
+            case FIX:
+                if (xReg < 1e-1 || xReg >= 1e11)
+                    return scientificFormatter.format(xReg);
+                else
+                    return fixFormatter.format(stack[XREG]);
+            case SCI:
+                return scientificFormatter.format(xReg);
+            case ENG:
+                return scientificFormatter.format(xReg);//fix this
+        }
+        return null;
+    }
+
+    private String formatScientificNotation(){
+        return null;
     }
 
     private void printStack() {
@@ -410,7 +435,7 @@ public class HP15c extends JFrame implements KeyListener {
                 liftStack();
                 xRegisterString = "";
                 if (!programExecution)
-                    display.drawBuffer(displayFormatter.format(stack[XREG]));
+                    display.drawBuffer(formatDisplay());
             }
         });
 
@@ -490,16 +515,17 @@ public class HP15c extends JFrame implements KeyListener {
                 lastEntry = LastEntry.DIGIT;
                 if(xRegisterString.contains("."))
                     return;
-                if ((xRegisterString.contains(".") ? xRegisterString.length() : xRegisterString.length() - 1) > 9)
-                    return;
+                /*if ((xRegisterString.contains(".") ? xRegisterString.length() : xRegisterString.length() - 1) > 9)
+                    return;*/
                 if (stackLift) {
                     liftStack();
-                    xRegisterString = "0.";
+                    xRegisterString = ".";
+                    stack[XREG] = 0.;
                 }
                 else {
                     xRegisterString = xRegisterString + ".";
+                    stack[XREG] = Double.parseDouble(xRegisterString);
                 }
-                stack[XREG] = Double.parseDouble(xRegisterString);
                 if (!programExecution)
                     display.drawBuffer(xRegisterString);
             }
@@ -698,105 +724,7 @@ public class HP15c extends JFrame implements KeyListener {
                 executeProgram(labelMap.get(KeyEvent.VK_A));
             }
         });
-
     }
-/*
-    public void square(){
-        if(digitBuffer.size() != 0) {
-            if(digitEntry)
-                pushStack();
-        }
-        stack[XREG] = stack[XREG] * stack[XREG];
-        stack[YREG] = stack[ZREG];
-        stack[ZREG] = stack[TREG];
-        stackLift = true;
-        printStack();
-    }
-
-    public void squareRoot(){
-        if(digitBuffer.size() != 0) {
-            if(digitEntry)
-                pushStack();
-        }
-        stack[XREG] = Math.sqrt(stack[XREG]);
-        stack[YREG] = stack[ZREG];
-        stack[ZREG] = stack[TREG];
-        stackLift = true;
-        printStack();
-    }
-
-    public void inverse(){
-        if(digitBuffer.size() != 0) {
-            if(digitEntry)
-                pushStack();
-        }
-        stack[XREG] = 1 / stack[XREG];
-        stack[YREG] = stack[ZREG];
-        stack[ZREG] = stack[TREG];
-        stackLift = true;
-        printStack();
-    }
-
-    public void power(){
-        if(digitBuffer.size() != 0) {
-            if(digitEntry)
-                pushStack();
-        }
-        stack[XREG] = Math.pow(stack[YREG], stack[XREG]);
-        stack[YREG] = stack[ZREG];
-        stack[ZREG] = stack[TREG];
-        stackLift = true;
-        printStack();
-    }
-
-    public void exponential(){
-        if(digitBuffer.size() != 0) {
-            if(digitEntry)
-                pushStack();
-        }
-        stack[XREG] = Math.exp(stack[XREG]);
-        stack[YREG] = stack[ZREG];
-        stack[ZREG] = stack[TREG];
-        stackLift = true;
-        printStack();
-    }
-
-    public void ln(){
-        if(digitBuffer.size() != 0) {
-            if(digitEntry)
-                pushStack();
-        }
-        stack[XREG] = Math.log(stack[XREG]);
-        stack[YREG] = stack[ZREG];
-        stack[ZREG] = stack[TREG];
-        stackLift = true;
-        printStack();
-    }
-
-    public void antilog(){
-        if(digitBuffer.size() != 0) {
-            if(digitEntry)
-                pushStack();
-        }
-        stack[XREG] = Math.pow(10.0, stack[XREG]);
-        stack[YREG] = stack[ZREG];
-        stack[ZREG] = stack[TREG];
-        stackLift = true;
-        printStack();
-    }
-
-    public void log(){
-        if(digitBuffer.size() != 0) {
-            if(digitEntry)
-                pushStack();
-        }
-        stack[XREG] = Math.log10(stack[XREG]);
-        stack[YREG] = stack[ZREG];
-        stack[ZREG] = stack[TREG];
-        stackLift = true;
-        printStack();
-    }
-*/
 
     @Override
     public void keyPressed(KeyEvent e) {

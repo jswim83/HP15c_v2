@@ -1,3 +1,5 @@
+import java.text.DecimalFormat;
+
 public class Digit {
 
     private static boolean[][] digits = {
@@ -13,29 +15,31 @@ public class Digit {
             {true, true, true, true, false, true, false},       //9
             {false, false, false, true, false, false, false},   //-
             {true, true, false, true, true, false, true},        //E
-            {true, true, false, false, true, false, false}      //R
+            {true, true, false, false, true, false, false},      //R
+            {false, false, false, false, false, false, false}    //blank
     };
 
-    public static Digit ZERO = new Digit('0', RadixMark.State.OFF);
-    public static Digit MINUS = new Digit('-', 10);
-    public static Digit E = new Digit('E', 11);
-    public static Digit R = new Digit('R', 12);
-    public static Digit O = new Digit('O', 0);
+    public static Digit ZERO = new Digit('0');
+    public static Digit MINUS = new Digit('-', 10, RadixMark.State.OFF);
+    public static Digit PERIOD = new Digit('.', 13, RadixMark.State.RADIX);
+    public static Digit E = new Digit('E', 11, RadixMark.State.OFF);
+    public static Digit R = new Digit('R', 12, RadixMark.State.OFF);
+    public static Digit O = new Digit('O', 0, RadixMark.State.OFF);
 
     private char digitChar;
     private boolean[] digit;
-    private RadixMark.State radixMark;
+    private RadixMark.State radixMark  = RadixMark.State.OFF;
 
-    public Digit(char digit, RadixMark.State radixMark){
+    public Digit(char digit){
         this.digitChar = digit;
         this.digit = digits[Character.getNumericValue(digit)];
         this.radixMark = radixMark;
     }
 
-    private Digit(char digit, int index){
+    private Digit(char digit, int index, RadixMark.State radixMark){
         this.digitChar = digit;
         this.digit = digits[index];
-        this.radixMark = RadixMark.State.OFF;
+        this.radixMark = radixMark;
     }
 
     @Override

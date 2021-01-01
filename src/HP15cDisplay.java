@@ -80,7 +80,8 @@ public class HP15cDisplay extends JPanel{
         repaint();
     }
 
-    public void drawBuffer(String buffer){
+
+    /*public void drawBuffer(String buffer){
         clear();
         if(buffer.isEmpty())
             return;
@@ -117,17 +118,42 @@ public class HP15cDisplay extends JPanel{
                 bufferIndex++;
             }
         }
+    }*/
+
+    public void drawBuffer(String buffer){
+        clear();
+        if(buffer.isEmpty())
+            return;
+        var bufferIndex = 0;
+        var displayIndex = 1;
+        if(buffer.charAt(bufferIndex) == '-') {
+            displays[0].setDigit(Digit.MINUS);
+            bufferIndex++;
+        }
+        while (bufferIndex < buffer.length() && displayIndex < 11){
+            var currentChar = buffer.charAt(bufferIndex);
+            if(Character.isDigit(currentChar))
+                displays[displayIndex++].setDigit(new Digit(currentChar));
+            else if(currentChar == ',')
+                displays[displayIndex - 1].setRadixMark(RadixMark.State.DIGIT_GROUP);
+            else
+                if(bufferIndex == 0)
+                    displays[displayIndex++].setDigit(Digit.PERIOD);
+                else
+                    displays[displayIndex - 1].setRadixMark(RadixMark.State.RADIX);
+                bufferIndex++;
+        }
     }
 
     public void drawProgram(int programIndex, HP15c.Input input){
         clear();
         var programIndexString = programStepFormatter.format((double)programIndex);
         for(int i = 0; i < 3; i++)
-            displays[i].setDigit(new Digit(programIndexString.charAt(i), RadixMark.State.OFF));
+            displays[i].setDigit(new Digit(programIndexString.charAt(i)));
         var displayIndex = 10;
         if(input != null) {
             for (int j = input.code.length() - 1; j > -1; j--)
-                displays[displayIndex--].setDigit(new Digit(input.code.charAt(j), RadixMark.State.OFF));
+                displays[displayIndex--].setDigit(new Digit(input.code.charAt(j)));
         }
     }
 

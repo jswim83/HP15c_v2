@@ -66,6 +66,12 @@ public class SevenSegmentDisplay extends Canvas {
         repaint();
     }
 
+    public void setRadixMark(RadixMark.State state){
+        active = true;
+        this.radixMark.setState(state);
+        repaint();
+    }
+
     public void clear(){
         active = false;
         repaint();
