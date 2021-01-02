@@ -22,7 +22,6 @@ public class HP15c extends JFrame implements KeyListener {
     private int programIndex;
     private volatile boolean labeling;
     private boolean stackLift = true;
-    private boolean erred;
     private LastEntry lastEntry = LastEntry.DIGIT;
     private DisplayMode displayMode;
     private int precision;
@@ -58,7 +57,7 @@ public class HP15c extends JFrame implements KeyListener {
             "#,##0.00000", "#,##0.000000", "#,##0.0000000", "#,##0.00000000", "#,##0.000000000"
     };
     private static String[] scientificPatterns = {
-            "stuff", "stuff", "stuff", "stuff"
+            "0.E00", "0.0E00", "0.00E00", "0.000E00"
     };
 
     public HP15c() {
@@ -164,7 +163,7 @@ public class HP15c extends JFrame implements KeyListener {
         var xReg = stack[XREG];
         switch (displayMode) {
             case FIX:
-                if (xReg < 1e-1 || xReg >= 1e11)
+                if (xReg < 1e-1 || xReg >= 1e10)
                     return scientificFormatter.format(xReg);
                 else
                     return fixFormatter.format(stack[XREG]);
@@ -540,7 +539,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if(!programExecution) {
-                    display.drawBuffer(displayFormatter.format(stack[XREG]));
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -555,7 +554,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if(!programExecution) {
-                    display.drawBuffer(displayFormatter.format(stack[XREG]));
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -570,7 +569,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if(!programExecution) {
-                    display.drawBuffer(displayFormatter.format(stack[XREG]));
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -585,7 +584,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if(!programExecution) {
-                    display.drawBuffer(displayFormatter.format(stack[XREG]));
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
