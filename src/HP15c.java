@@ -13,7 +13,7 @@ public class HP15c extends JFrame implements KeyListener {
     private String xRegisterString = "0";
     private final LinkedList<Character> commandBuffer;
     private final double[] stack;
-    private final Input[] programMemory = new Input[440];
+    private final Input[] programMemory = new Input[448];
     private final Stack<Integer> programStack = new Stack<>();
     private final HashMap<String, Input> operationMap = new HashMap<>(20);
     private final HashMap<String, Input> labelMap = new HashMap<>(15);
@@ -23,7 +23,7 @@ public class HP15c extends JFrame implements KeyListener {
     private volatile boolean labeling;
     private boolean stackLift = true;
     private LastEntry lastEntry = LastEntry.DIGIT;
-    private DisplayMode displayMode;
+    private DisplayMode displayMode = DisplayMode.FIX;
     private int precision;
     private DecimalFormat displayFormatter;
     private DecimalFormat fixFormatter;
@@ -42,31 +42,29 @@ public class HP15c extends JFrame implements KeyListener {
         FIX, SCI, ENG;
     }
 
-    public abstract class Input {
-        public String code;
-
-        public Input(String code) {
-            this.code = code;
-        }
-
-        public abstract void input();
-    }
-
-    private static String[] fixPatterns = {
+    private static final String[] fixPatterns = {
             "#,##0.", "#,##0.0", "#,##0.00", "#,##0.000", "#,##0.0000",
             "#,##0.00000", "#,##0.000000", "#,##0.0000000", "#,##0.00000000", "#,##0.000000000"
     };
-    private static String[] scientificPatterns = {
-            "0.E00", "0.0E00", "0.00E00", "0.000E00"
+    private static final String[] scientificPatterns = {
+            "0.E00", "0.0E00", "0.00E00", "0.000E00", "0.0000E00", "0.00000E00",
+            "0.000000E00", "0.0000000E00", "0.00000000E00", "0.000000000E00",
     };
+
+    public abstract class Input {
+        public String code;
+        public Input(String code) {
+            this.code = code;
+        }
+        public abstract void input();
+    }
 
     public HP15c() {
         setupOperations();
         this.display = new HP15cDisplay();
         this.commandBuffer = new LinkedList<>();
         this.stack = new double[4];
-        this.displayMode = DisplayMode.FIX;
-        this.precision = 2;
+        this.precision = 4;
         this.fixFormatter = new DecimalFormat(fixPatterns[precision]);
         this.scientificFormatter = new DecimalFormat(scientificPatterns[precision]);
         this.displayFormatter = this.fixFormatter;
@@ -91,8 +89,6 @@ public class HP15c extends JFrame implements KeyListener {
         var inputCode = e.getKeyCode();
         var inputChar = e.getKeyChar();
         var inputString = String.valueOf(inputCode);
-        System.out.println("Typed: " + inputChar);
-        System.out.println("key code " + inputCode);
         //if labeling
         if (labeling) {
             if (labelMap.containsKey(inputString)) {
@@ -129,7 +125,6 @@ public class HP15c extends JFrame implements KeyListener {
         //if entering a multi-character command
         if (Character.isAlphabetic(inputChar)) {
             commandBuffer.add(inputChar);
-            lastEntry = LastEntry.COMMAND;
             display.updateCommandDisplay(commandBuffer);
             var commandString = charLLtoString(commandBuffer);
             if (operationMap.containsKey(commandString)) {
@@ -149,7 +144,9 @@ public class HP15c extends JFrame implements KeyListener {
                     operationMap.get(commandString).input();
                 commandBuffer.clear();
                 display.updateCommandDisplay(commandBuffer);
+                return;
             }
+            lastEntry = LastEntry.COMMAND;
             return;
         }
         System.out.println("invalid key");
@@ -163,7 +160,7 @@ public class HP15c extends JFrame implements KeyListener {
         var xReg = stack[XREG];
         switch (displayMode) {
             case FIX:
-                if (xReg < 1e-1 || xReg >= 1e10)
+                if (((xReg > -1e-1 && xReg < 1e-1) || (xReg <= -1e10 && xReg >= 1e10)) && stack[XREG] != 0.0)
                     return scientificFormatter.format(xReg);
                 else
                     return fixFormatter.format(stack[XREG]);
@@ -194,6 +191,22 @@ public class HP15c extends JFrame implements KeyListener {
         stackLift = false;
     }
 
+    private void inputDigit(String digit){
+            lastEntry = LastEntry.DIGIT;
+            if ((xRegisterString.contains(".") ? xRegisterString.length() - 1 : xRegisterString.length()) > 9)
+                return;
+            if (stackLift) {
+                liftStack();
+                xRegisterString = digit;
+            }
+            else {
+                xRegisterString = xRegisterString + digit;
+            }
+            stack[XREG] = Double.parseDouble(xRegisterString);
+            if (!programExecution)
+                display.drawBuffer(xRegisterString);
+    }
+
     private void executeProgram(HP15c.Input label){
         var labelIndex = getLabelIndex(label);
         System.out.println("label at: " + labelIndex);
@@ -211,7 +224,7 @@ public class HP15c extends JFrame implements KeyListener {
     private Integer getLabelIndex(HP15c.Input label){
         var index = programIndex;
         var numberChecked = 0;
-        while (numberChecked < 440){
+        while (numberChecked < programMemory.length){
             if (programMemory[index++] == label)
                 return index;
             numberChecked++;
@@ -223,21 +236,8 @@ public class HP15c extends JFrame implements KeyListener {
         operationMap.put(String.valueOf(KeyEvent.VK_0), new Input("00") {
             @Override
             public void input() {
-                if (!programMode) {
-                    lastEntry = LastEntry.DIGIT;
-                    if (xRegisterString.length() > 9)
-                        return;
-                    if (stackLift) {
-                        liftStack();
-                        xRegisterString = "0";
-                    }
-                    else {
-                        xRegisterString = xRegisterString + "0";
-                    }
-                    stack[XREG] = Double.parseDouble(xRegisterString);
-                    if (!programExecution)
-                        display.drawBuffer(xRegisterString);
-                }
+                if (!programMode)
+                    inputDigit("0");
                 else {
                     programMemory[++programIndex] = this;
                     display.drawProgram(programIndex, this);
@@ -248,21 +248,8 @@ public class HP15c extends JFrame implements KeyListener {
         operationMap.put(String.valueOf(KeyEvent.VK_1), new Input("01") {
             @Override
             public void input() {
-                if (!programMode) {
-                    lastEntry = LastEntry.DIGIT;
-                    if (xRegisterString.length() > 9)
-                        return;
-                    if (stackLift) {
-                        liftStack();
-                        xRegisterString = "1";
-                    }
-                    else {
-                        xRegisterString = xRegisterString + "1";
-                    }
-                    stack[XREG] = Double.parseDouble(xRegisterString);
-                    if (!programExecution)
-                        display.drawBuffer(xRegisterString);
-                }
+                if (!programMode)
+                    inputDigit("1");
                 else {
                     programMemory[++programIndex] = this;
                     display.drawProgram(programIndex, this);
@@ -273,21 +260,8 @@ public class HP15c extends JFrame implements KeyListener {
         operationMap.put(String.valueOf(KeyEvent.VK_2), new Input("02") {
             @Override
             public void input() {
-                if (!programMode) {
-                    lastEntry = LastEntry.DIGIT;
-                    if (xRegisterString.length() > 9)
-                        return;
-                    if (stackLift) {
-                        liftStack();
-                        xRegisterString = "2";
-                    }
-                    else {
-                        xRegisterString = xRegisterString + "2";
-                    }
-                    stack[XREG] = Double.parseDouble(xRegisterString);
-                    if (!programExecution)
-                        display.drawBuffer(xRegisterString);
-                }
+                if (!programMode)
+                    inputDigit("2");
                 else {
                     programMemory[++programIndex] = this;
                     display.drawProgram(programIndex, this);
@@ -298,133 +272,84 @@ public class HP15c extends JFrame implements KeyListener {
         operationMap.put(String.valueOf(KeyEvent.VK_3), new Input("03") {
             @Override
             public void input() {
-                lastEntry = LastEntry.DIGIT;
-                if (xRegisterString.length() > 9)
-                    return;
-                if (stackLift) {
-                    liftStack();
-                    xRegisterString = "3";
-                }
+                if (!programMode)
+                    inputDigit("3");
                 else {
-                    xRegisterString = xRegisterString + "3";
+                    programMemory[++programIndex] = this;
+                    display.drawProgram(programIndex, this);
                 }
-                stack[XREG] = Double.parseDouble(xRegisterString);
-                if (!programExecution)
-                    display.drawBuffer(xRegisterString);
             }
         });
 
         operationMap.put(String.valueOf(KeyEvent.VK_4), new Input("04") {
             @Override
             public void input() {
-                lastEntry = LastEntry.DIGIT;
-                if (xRegisterString.length() > 9)
-                    return;
-                if (stackLift) {
-                    liftStack();
-                    xRegisterString = "4";
-                }
+                if (!programMode)
+                    inputDigit("4");
                 else {
-                    xRegisterString = xRegisterString + "4";
+                    programMemory[++programIndex] = this;
+                    display.drawProgram(programIndex, this);
                 }
-                stack[XREG] = Double.parseDouble(xRegisterString);
-                if (!programExecution)
-                    display.drawBuffer(xRegisterString);
             }
         });
 
         operationMap.put(String.valueOf(KeyEvent.VK_5), new Input("05") {
             @Override
             public void input() {
-                lastEntry = LastEntry.DIGIT;
-                if (xRegisterString.length() > 9)
-                    return;
-                if (stackLift) {
-                    liftStack();
-                    xRegisterString = "5";
-                }
+                if (!programMode)
+                    inputDigit("5");
                 else {
-                    xRegisterString = xRegisterString + "5";
+                    programMemory[++programIndex] = this;
+                    display.drawProgram(programIndex, this);
                 }
-                stack[XREG] = Double.parseDouble(xRegisterString);
-                if (!programExecution)
-                    display.drawBuffer(xRegisterString);
             }
         });
 
         operationMap.put(String.valueOf(KeyEvent.VK_6), new Input("06") {
             @Override
             public void input() {
-                lastEntry = LastEntry.DIGIT;
-                if (xRegisterString.length() > 9)
-                    return;
-                if (stackLift) {
-                    liftStack();
-                    xRegisterString = "6";
-                }
+                if (!programMode)
+                    inputDigit("6");
                 else {
-                    xRegisterString = xRegisterString + "6";
+                    programMemory[++programIndex] = this;
+                    display.drawProgram(programIndex, this);
                 }
-                stack[XREG] = Double.parseDouble(xRegisterString);
-                if (!programExecution)
-                    display.drawBuffer(xRegisterString);
             }
         });
 
         operationMap.put(String.valueOf(KeyEvent.VK_7), new Input("07") {
             @Override
             public void input() {
-                lastEntry = LastEntry.DIGIT;
-                if (xRegisterString.length() > 9)
-                    return;
-                if (stackLift) {
-                    liftStack();
-                    xRegisterString = "7";
-                }
+                if (!programMode)
+                    inputDigit("7");
                 else {
-                    xRegisterString = xRegisterString + "7";
+                    programMemory[++programIndex] = this;
+                    display.drawProgram(programIndex, this);
                 }
-                stack[XREG] = Double.parseDouble(xRegisterString);
-                if (!programExecution)
-                    display.drawBuffer(xRegisterString);
             }
         });
 
         operationMap.put(String.valueOf(KeyEvent.VK_8), new Input("08") {
             @Override
             public void input() {
-                lastEntry = LastEntry.DIGIT;
-                if (xRegisterString.length() > 9)
-                    return;
-                if (stackLift) {
-                    liftStack();
-                    xRegisterString = "8";
-                }
+                if (!programMode)
+                    inputDigit("8");
                 else {
-                    xRegisterString = xRegisterString + "8";
+                    programMemory[++programIndex] = this;
+                    display.drawProgram(programIndex, this);
                 }
-                stack[XREG] = Double.parseDouble(xRegisterString);
-                if (!programExecution)
-                    display.drawBuffer(xRegisterString);
             }
         });
 
         operationMap.put(String.valueOf(KeyEvent.VK_9), new Input("09") {
             @Override
             public void input() {
-                lastEntry = LastEntry.DIGIT;
-                if (xRegisterString.length() > 9)
-                    return;
-                if (stackLift) {
-                    liftStack();
-                    xRegisterString = "9";
-                }
+                if (!programMode)
+                    inputDigit("9");
                 else {
-                    xRegisterString = xRegisterString + "9";
+                    programMemory[++programIndex] = this;
+                    display.drawProgram(programIndex, this);
                 }
-                stack[XREG] = Double.parseDouble(xRegisterString);
-                if (!programExecution)
-                    display.drawBuffer(xRegisterString);
             }
         });
 
@@ -530,7 +455,65 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("plus", new Input("40") {
+        operationMap.put("chs", new Input("16") {
+            @Override
+            public void input() {
+                if (!programMode) {
+                    if (!xRegisterString.isEmpty()) {
+                        if (xRegisterString.charAt(0) != '-') {
+                            xRegisterString = "-" + xRegisterString;
+                        }
+                        else {
+                            xRegisterString = xRegisterString.substring(1, xRegisterString.length());
+                        }
+                        stack[XREG] *= -1.0;
+                        if(!programExecution)
+                            display.drawBuffer(xRegisterString);
+                    }
+                    else {
+                        stack[XREG] *= -1.0;
+                        if(!programExecution)
+                            display.drawBuffer(formatDisplay());
+                    }
+                }
+                else {
+                    programMemory[++programIndex] = this;
+                    display.drawProgram(programIndex, this);
+                }
+            }
+        });
+
+        operationMap.put("rd", new Input("33") {
+            @Override
+            public void input() {
+                var temp = stack[XREG];
+                stack[XREG] = stack[YREG];
+                stack[YREG] = stack[ZREG];
+                stack[ZREG] = stack[TREG];
+                stack[TREG] = temp;
+                xRegisterString = "";
+                if(!programExecution)
+                    display.drawBuffer(formatDisplay());
+                printStack();
+            }
+        });
+
+        operationMap.put("ru", new Input("33") {
+            @Override
+            public void input() {
+                var temp = stack[TREG];
+                stack[TREG] = stack[ZREG];
+                stack[ZREG] = stack[YREG];
+                stack[YREG] = stack[XREG];
+                stack[XREG] = temp;
+                xRegisterString = "";
+                if(!programExecution)
+                    display.drawBuffer(formatDisplay());
+                printStack();
+            }
+        });
+
+        operationMap.put("plus", new Input("46") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] + stack[XREG];
@@ -545,7 +528,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("sub", new Input("40") {
+        operationMap.put("sub", new Input("36") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] - stack[XREG];
@@ -560,7 +543,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("mult", new Input("40") {
+        operationMap.put("mult", new Input("26") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] * stack[XREG];
@@ -575,12 +558,158 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("div", new Input("40") {
+        operationMap.put("div", new Input("16") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] / stack[XREG];
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
+                xRegisterString = "";
+                stackLift = true;
+                if(!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("sqt", new Input("11") {
+            @Override
+            public void input() {
+                stack[XREG] = Math.sqrt(stack[XREG]);
+                stack[YREG] = stack[ZREG];
+                stack[ZREG] = stack[TREG];
+                xRegisterString = "";
+                stackLift = true;
+                if(!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("exp", new Input("12") {
+            @Override
+            public void input() {
+                stack[XREG] = Math.exp(stack[XREG]);
+                stack[YREG] = stack[ZREG];
+                stack[ZREG] = stack[TREG];
+                xRegisterString = "";
+                stackLift = true;
+                if(!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("alog", new Input("13") {
+            @Override
+            public void input() {
+                stack[XREG] = Math.pow(10.0, stack[XREG]);
+                stack[YREG] = stack[ZREG];
+                stack[ZREG] = stack[TREG];
+                xRegisterString = "";
+                stackLift = true;
+                if(!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("yx", new Input("14") {
+            @Override
+            public void input() {
+                stack[XREG] = Math.pow(stack[YREG], stack[XREG]);
+                stack[YREG] = stack[ZREG];
+                stack[ZREG] = stack[TREG];
+                xRegisterString = "";
+                stackLift = true;
+                if(!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("inv", new Input("15") {
+            @Override
+            public void input() {
+                stack[XREG] = 1.0 / stack[XREG];
+                stack[YREG] = stack[ZREG];
+                stack[ZREG] = stack[TREG];
+                xRegisterString = "";
+                stackLift = true;
+                if(!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("sqr", new Input("11") {
+            @Override
+            public void input() {
+                stack[XREG] = stack[XREG] * stack[XREG];
+                stack[YREG] = stack[ZREG];
+                stack[ZREG] = stack[TREG];
+                xRegisterString = "";
+                stackLift = true;
+                if(!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("ln", new Input("12") {
+            @Override
+            public void input() {
+                stack[XREG] = Math.log(stack[XREG]);
+                stack[YREG] = stack[ZREG];
+                stack[ZREG] = stack[TREG];
+                xRegisterString = "";
+                stackLift = true;
+                if(!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("log", new Input("13") {
+            @Override
+            public void input() {
+                stack[XREG] = Math.log10(stack[XREG]);
+                stack[YREG] = stack[ZREG];
+                stack[ZREG] = stack[TREG];
+                xRegisterString = "";
+                stackLift = true;
+                if(!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("per", new Input("14") {
+            @Override
+            public void input() {
+                stack[XREG] = stack[YREG] * .01 * stack[XREG];
+                xRegisterString = "";
+                stackLift = true;
+                if(!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("pch", new Input("15") {
+            @Override
+            public void input() {
+                stack[XREG] = (stack[XREG] - stack[YREG]) * 100 / stack[YREG];
                 xRegisterString = "";
                 stackLift = true;
                 if(!programExecution) {
@@ -721,6 +850,34 @@ public class HP15c extends JFrame implements KeyListener {
             public void input() {
                 programExecution = true;
                 executeProgram(labelMap.get(KeyEvent.VK_A));
+            }
+        });
+        operationMap.put("fb", new Input("00") {
+            @Override
+            public void input() {
+                programExecution = true;
+                executeProgram(labelMap.get(KeyEvent.VK_B));
+            }
+        });
+        operationMap.put("fc", new Input("00") {
+            @Override
+            public void input() {
+                programExecution = true;
+                executeProgram(labelMap.get(KeyEvent.VK_C));
+            }
+        });
+        operationMap.put("fd", new Input("00") {
+            @Override
+            public void input() {
+                programExecution = true;
+                executeProgram(labelMap.get(KeyEvent.VK_D));
+            }
+        });
+        operationMap.put("fe", new Input("00") {
+            @Override
+            public void input() {
+                programExecution = true;
+                executeProgram(labelMap.get(KeyEvent.VK_E));
             }
         });
     }

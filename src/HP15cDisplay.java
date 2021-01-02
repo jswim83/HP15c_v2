@@ -18,7 +18,7 @@ public class HP15cDisplay extends JPanel {
             /*B*/       {},
             /*C*/       {"chs"},
             /*D*/       {"div"},
-            /*E*/       {"enter", "exp"},
+            /*E*/       {"exp"},
             /*F*/       {},
             /*G*/       {},
             /*H*/       {},
@@ -29,9 +29,9 @@ public class HP15cDisplay extends JPanel {
             /*M*/       {"mult"},
             /*N*/       {},
             /*O*/       {},
-            /*P*/       {"plus", "pow", "pr"},
+            /*P*/       {"pch", "per", "plus", "pow", "pr"},
             /*Q*/       {},
-            /*R*/       {},
+            /*R*/       {"rd", "ru"},
             /*S*/       {"sub", "sqr", "sqt"},
             /*T*/       {},
             /*U*/       {},
@@ -79,46 +79,6 @@ public class HP15cDisplay extends JPanel {
         revalidate();
         repaint();
     }
-
-
-    /*public void drawBuffer(String buffer){
-        clear();
-        if(buffer.isEmpty())
-            return;
-        if(buffer.charAt(0) == 'E'){
-            displays[1].setDigit(Digit.E);
-            displays[2].setDigit(Digit.R);
-            displays[3].setDigit(Digit.R);
-            displays[4].setDigit(Digit.O);
-            displays[5].setDigit(Digit.R);
-            displays[7].setDigit(new Digit(buffer.charAt(buffer.length() - 1), RadixMark.State.OFF));
-            return;
-        }
-        var displayIndex = 1;
-        var bufferIndex = 0;
-        char currentDigit;
-        char nextDigit;
-        if(buffer.charAt(0) == '-') {
-            displays[0].setDigit(Digit.MINUS);
-            bufferIndex++;
-        }
-        while(bufferIndex < buffer.length()){
-            currentDigit = buffer.charAt(bufferIndex);
-            nextDigit = (bufferIndex == buffer.length() - 1) ? '0' : buffer.charAt(bufferIndex + 1);
-            if(nextDigit == '.') {
-                displays[displayIndex++].setDigit(new Digit(currentDigit, RadixMark.State.RADIX));
-                bufferIndex += 2;
-            }
-            else if(nextDigit == ',') {
-                displays[displayIndex++].setDigit(new Digit(currentDigit, RadixMark.State.DIGIT_GROUP));
-                bufferIndex += 2;
-            }
-            else {
-                displays[displayIndex++].setDigit(new Digit(currentDigit, RadixMark.State.OFF));
-                bufferIndex++;
-            }
-        }
-    }*/
 
     public void drawBuffer(String buffer) {
         clear();
