@@ -2,7 +2,6 @@ import javax.swing.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.text.DecimalFormat;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Stack;
@@ -23,11 +22,10 @@ public class HP15c extends JFrame implements KeyListener {
     private boolean programMode;
     private boolean programExecution;
     private int programIndex;
-    private boolean waitingForInput;
-    private String nextInput;
     private boolean stackLift = true;
     private LastEntry lastEntry = LastEntry.DIGIT;
     private DisplayMode displayMode = DisplayMode.FIX;
+    private AngleMode angleMode = AngleMode.GRAD;
     private int precision;
     private DecimalFormat displayFormatter;
     private DecimalFormat fixFormatter;
@@ -46,6 +44,10 @@ public class HP15c extends JFrame implements KeyListener {
         FIX, SCI, ENG;
     }
 
+    private enum AngleMode {
+        DEG, RAD, GRAD;
+    }
+
     private static final String[] fixPatterns = {
             "#,##0.", "#,##0.0", "#,##0.00", "#,##0.000", "#,##0.0000",
             "#,##0.00000", "#,##0.000000", "#,##0.0000000", "#,##0.00000000", "#,##0.000000000"
@@ -57,12 +59,18 @@ public class HP15c extends JFrame implements KeyListener {
 
     public abstract class Input {
         public String code;
-
         public Input(String code) {
             this.code = code;
         }
-
         public abstract void input();
+    }
+
+    private abstract class AddressedInput extends Input{
+        public String address;
+        public AddressedInput(String code, String address) {
+            super(code);
+            this.address = address;
+        }
     }
 
     public HP15c() {
@@ -92,59 +100,10 @@ public class HP15c extends JFrame implements KeyListener {
 
     @Override
     public void keyReleased(KeyEvent e) {
+        System.out.println("outer listener");
         var inputCode = e.getKeyCode();
         var inputChar = e.getKeyChar();
         var inputString = String.valueOf(inputCode);
-        //if labeling
-        if (waitingForInput) {
-            switch (nextInput) {
-                case "lbl":
-                    if (labelMap.containsKey(inputString)) {
-                        programMemory[++programIndex] = labelMap.get(inputString);
-                        display.drawProgram(programIndex, labelMap.get(inputString));
-                        System.out.println(labelMap.get(inputString).code);
-                    }
-                    waitingForInput = false;
-                    break;
-                case "sto":
-                    commandBuffer.add(inputChar);
-                    var stoString = charLLtoString(commandBuffer);
-                    if (registerMap.containsKey(stoString)) {
-                        registers[registerMap.get(stoString)] = stack[XREG];
-                        stackLift = true;
-                        waitingForInput = false;
-                        commandBuffer.clear();
-                        display.drawBuffer(formatDisplay());
-                    }
-                    else if (stoString.length() == 1 && stoString.charAt(0) == '.')
-                        ;
-                    else {
-                        //error out
-                        waitingForInput = false;
-                        commandBuffer.clear();
-                    }
-                    break;
-                case "rcl":
-                    commandBuffer.add(inputChar);
-                    var rclString = charLLtoString(commandBuffer);
-                    if (registerMap.containsKey(rclString)) {
-                        liftStack();
-                        stack[XREG] = registers[registerMap.get(rclString)];
-                        waitingForInput = false;
-                        commandBuffer.clear();
-                        display.drawBuffer(formatDisplay());
-                    }
-                    else if (rclString.length() == 1 && rclString.charAt(0) == '.')
-                        ;
-                    else {
-                        //error out
-                        waitingForInput = false;
-                        commandBuffer.clear();
-                    }
-                    break;
-            }
-            return;
-        }
         //if entering a single character command
         if (operationMap.containsKey(inputString)) {
             if (programMode) {
@@ -166,6 +125,7 @@ public class HP15c extends JFrame implements KeyListener {
         }
         //if entering a multi-character command
         if (Character.isAlphabetic(inputChar)) {
+            lastEntry = LastEntry.COMMAND;
             commandBuffer.add(inputChar);
             display.updateCommandDisplay(commandBuffer);
             var commandString = charLLtoString(commandBuffer);
@@ -174,6 +134,8 @@ public class HP15c extends JFrame implements KeyListener {
                     switch (commandString) {
                         case "pr":
                         case "lbl":
+                        case "sto":
+                        case "rcl":
                             operationMap.get(commandString).input();
                             break;
                         default:
@@ -181,7 +143,8 @@ public class HP15c extends JFrame implements KeyListener {
                             display.drawProgram(programIndex, operationMap.get(commandString));
                             break;
                     }
-                } else
+                }
+                else
                     operationMap.get(commandString).input();
                 commandBuffer.clear();
                 display.updateCommandDisplay(commandBuffer);
@@ -395,6 +358,7 @@ public class HP15c extends JFrame implements KeyListener {
         operationMap.put(String.valueOf(KeyEvent.VK_ENTER), new Input("16") {
             @Override
             public void input() {
+                lastEntry = LastEntry.COMMAND;
                 liftStack();
                 xRegisterString = "";
                 if (!programExecution)
@@ -402,7 +366,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_BACK_SPACE), new Input("14") {
+        operationMap.put(String.valueOf(KeyEvent.VK_BACK_SPACE), new Input("35") {
             @Override
             public void input() {
                 if (!programMode) {
@@ -429,14 +393,18 @@ public class HP15c extends JFrame implements KeyListener {
                                 break;
                         }
                         display.drawBuffer(xRegisterString);
-                    } else {
-                        if (commandBuffer.isEmpty())
-                            ;
+                    }
+                    else {
+                        if (commandBuffer.isEmpty()) {
+                            stack[XREG] = 0.0;
+                            display.drawBuffer(formatDisplay());
+                        }
                         else
                             commandBuffer.clear();
                         display.updateCommandDisplay(commandBuffer);
                     }
-                } else {
+                }
+                else {
                     if (commandBuffer.isEmpty()) {
                         if (programIndex > 0) {
                             programMemory[programIndex--] = null;
@@ -467,7 +435,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_PERIOD), new Input("34") {
+        operationMap.put(String.valueOf(KeyEvent.VK_PERIOD), new Input("48") {
             @Override
             public void input() {
                 lastEntry = LastEntry.DIGIT;
@@ -485,6 +453,16 @@ public class HP15c extends JFrame implements KeyListener {
                 }
                 if (!programExecution)
                     display.drawBuffer(xRegisterString);
+            }
+        });
+
+        operationMap.put("clx", new Input("35") {
+            @Override
+            public void input() {
+                xRegisterString = "";
+                stack[XREG] = 0.0;
+                if(!programExecution)
+                    display.drawBuffer(formatDisplay());
             }
         });
 
@@ -513,19 +491,112 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("sto", new Input("44") {
+        operationMap.put("sto", new AddressedInput("44", "") {
             @Override
             public void input() {
-                waitingForInput = true;
-                nextInput = "sto";
+                address = "";
+                removeKeyListener(HP15c.this);
+                addKeyListener(new KeyListener() {
+                    @Override
+                    public void keyReleased(KeyEvent e) {
+                        var inputString = String.valueOf(e.getKeyChar());
+                        address = address + inputString;
+                        if (registerMap.containsKey(address)) {
+                            if(programMode){
+                                programMemory[++programIndex] = new AddressedInput("44", address) {
+                                    @Override
+                                    public void input() {
+                                        registers[registerMap.get(address)] = stack[XREG];
+                                    }
+                                };
+                                display.drawProgram(programIndex, programMemory[programIndex]);
+                            }
+                            else {
+                                registers[registerMap.get(address)] = stack[XREG];
+                                stackLift = true;
+                                display.drawBuffer(formatDisplay());
+                            }
+                            removeKeyListener(getKeyListeners()[0]);
+                            addKeyListener(HP15c.this);
+                        }
+                        else if (address.length() == 1 && address.charAt(0) == '.')
+                            ;
+                        else {
+                            if(programMode)
+                                display.drawProgram(programIndex, programMemory[programIndex]);
+                            else {
+                                stackLift = true;
+                                display.drawBuffer(formatDisplay());
+                            }
+                            removeKeyListener(getKeyListeners()[0]);
+                            addKeyListener(HP15c.this);
+                        }
+                    }
+                    @Override
+                    public void keyPressed(KeyEvent e) {
+
+                    }
+                    @Override
+                    public void keyTyped(KeyEvent e) {
+
+                    }
+                });
+
             }
         });
 
-        operationMap.put("rcl", new Input("45") {
+        operationMap.put("rcl", new AddressedInput("45", "") {
             @Override
             public void input() {
-                waitingForInput = true;
-                nextInput = "rcl";
+                address = "";
+                removeKeyListener(HP15c.this);
+                addKeyListener(new KeyListener() {
+                    @Override
+                    public void keyReleased(KeyEvent e) {
+                        var inputString = String.valueOf(e.getKeyChar());
+                        address = address + inputString;
+                        if (registerMap.containsKey(address)) {
+                            if(programMode){
+                                programMemory[++programIndex] = new AddressedInput("44", address) {
+                                    @Override
+                                    public void input() {
+                                        stack[XREG] = registers[registerMap.get(address)];
+                                    }
+                                };
+                                display.drawProgram(programIndex, programMemory[programIndex]);
+                            }
+                            else {
+                                liftStack();
+                                stack[XREG] = registers[registerMap.get(address)];
+                                stackLift = true;
+                                display.drawBuffer(formatDisplay());
+                            }
+                            removeKeyListener(getKeyListeners()[0]);
+                            addKeyListener(HP15c.this);
+                        }
+                        else if (address.length() == 1 && address.charAt(0) == '.')
+                            ;
+                        else {
+                            if(programMode)
+                                display.drawProgram(programIndex, programMemory[programIndex]);
+                            else {
+                                stackLift = true;
+                                display.drawBuffer(formatDisplay());
+                            }
+                            removeKeyListener(getKeyListeners()[0]);
+                            addKeyListener(HP15c.this);
+                        }
+                    }
+                    @Override
+                    public void keyPressed(KeyEvent e) {
+
+                    }
+                    @Override
+                    public void keyTyped(KeyEvent e) {
+
+                    }
+                });
+
             }
         });
 
@@ -559,7 +630,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("plus", new Input("46") {
+        operationMap.put("plus", new Input("40") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] + stack[XREG];
@@ -574,7 +645,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("sub", new Input("36") {
+        operationMap.put("sub", new Input("30") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] - stack[XREG];
@@ -589,7 +660,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("mult", new Input("26") {
+        operationMap.put("mult", new Input("20") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] * stack[XREG];
@@ -604,7 +675,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("div", new Input("16") {
+        operationMap.put("div", new Input("10") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] / stack[XREG];
@@ -765,6 +836,143 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
+        operationMap.put("sin", new Input("23") {
+            @Override
+            public void input() {
+                switch (angleMode) {
+                    case DEG:
+                        stack[XREG] = Math.sin(stack[XREG] / 2 / Math.PI * 180);
+                        break;
+                    case RAD:
+                        stack[XREG] = Math.sin(stack[XREG]);
+                        break;
+                    case GRAD:
+                        stack[XREG] = Math.sin(stack[XREG] / 200 * Math.PI);
+                        break;
+                }
+                xRegisterString = "";
+                stackLift = true;
+                if (!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("cos", new Input("24") {
+            @Override
+            public void input() {
+                switch (angleMode) {
+                    case DEG:
+                        stack[XREG] = Math.cos(stack[XREG] / 2 / Math.PI * 180);
+                        break;
+                    case RAD:
+                        stack[XREG] = Math.cos(stack[XREG]);
+                        break;
+                    case GRAD:
+                        stack[XREG] = Math.cos(stack[XREG] / 200 * Math.PI);
+                        break;
+                }
+                xRegisterString = "";
+                stackLift = true;
+                if (!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("tan", new Input("25") {
+            @Override
+            public void input() {
+                switch (angleMode) {
+                    case DEG:
+                        stack[XREG] = Math.tan(stack[XREG] / 2 / Math.PI * 180);
+                        break;
+                    case RAD:
+                        stack[XREG] = Math.tan(stack[XREG]);
+                        break;
+                    case GRAD:
+                        stack[XREG] = Math.tan(stack[XREG] / 200 * Math.PI);
+                        break;
+                }                xRegisterString = "";
+                stackLift = true;
+                if (!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("hsin", new Input("23") {
+            @Override
+            public void input() {
+                switch (angleMode) {
+                    case DEG:
+                        stack[XREG] = Math.sinh(stack[XREG] / 2 / Math.PI * 180);
+                        break;
+                    case RAD:
+                        stack[XREG] = Math.sinh(stack[XREG]);
+                        break;
+                    case GRAD:
+                        stack[XREG] = Math.sinh(stack[XREG] / 200 * Math.PI);
+                        break;
+                }
+                xRegisterString = "";
+                stackLift = true;
+                if (!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("hcos", new Input("24") {
+            @Override
+            public void input() {
+                switch (angleMode) {
+                    case DEG:
+                        stack[XREG] = Math.cosh(stack[XREG] / 2 / Math.PI * 180);
+                        break;
+                    case RAD:
+                        stack[XREG] = Math.cosh(stack[XREG]);
+                        break;
+                    case GRAD:
+                        stack[XREG] = Math.cosh(stack[XREG] / 200 * Math.PI);
+                        break;
+                }
+                xRegisterString = "";
+                stackLift = true;
+                if (!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+        operationMap.put("htan", new Input("25") {
+            @Override
+            public void input() {
+                switch (angleMode) {
+                    case DEG:
+                        stack[XREG] = Math.tanh(stack[XREG] / 2 / Math.PI * 180);
+                        break;
+                    case RAD:
+                        stack[XREG] = Math.tanh(stack[XREG]);
+                        break;
+                    case GRAD:
+                        stack[XREG] = Math.tanh(stack[XREG] / 200 * Math.PI);
+                        break;
+                }                xRegisterString = "";
+                stackLift = true;
+                if (!programExecution) {
+                    display.drawBuffer(formatDisplay());
+                    printStack();
+                }
+            }
+        });
+
+
         //program operations
         operationMap.put("pr", new Input("50") {
             @Override
@@ -779,18 +987,42 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("lbl", new Input("") {
+        operationMap.put("lbl", new Input("31") {
             @Override
             public void input() {
-                waitingForInput = true;
-                nextInput = "lbl";
-                System.out.println("labeling: " + waitingForInput);
+                if(!programMode)
+                    return;
+                removeKeyListener(HP15c.this);
+                addKeyListener(new KeyListener() {
+                    @Override
+                    public void keyReleased(KeyEvent e) {
+                        System.out.println("inner listener");
+                        var inputString = String.valueOf(e.getKeyCode());
+                        if (labelMap.containsKey(inputString)) {
+                            programMemory[++programIndex] = labelMap.get(inputString);
+                            display.drawProgram(programIndex, labelMap.get(inputString));
+                            System.out.println(labelMap.get(inputString).code);
+                        }
+                        removeKeyListener(getKeyListeners()[0]);
+                        addKeyListener(HP15c.this);
+                    }
+                    @Override
+                    public void keyPressed(KeyEvent e) {
+
+                    }
+                    @Override
+                    public void keyTyped(KeyEvent e) {
+
+                    }
+                });
             }
         });
 
         operationMap.put("rtn", new Input("42") {
             @Override
             public void input() {
+                if(!programMode || programExecution)
+                    return;
                 if (programStack.isEmpty()) {
                     programExecution = false;
                     programIndex = 0;
