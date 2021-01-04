@@ -9,19 +9,9 @@ import java.util.HashMap;
 public class SevenSegmentDisplay extends Canvas {
 
     private Segment[] segments;
-    /*        1
-            xxxxx
-            X   X
-         2  X   X  3
-            X   X
-          4 xxxxx
-            X   X
-         5  X   X  6
-            X   X
-            xxxxx     O  dp
-              7      /   cm
-     */
     private RadixMark radixMark;
+    private Annunciator topAnnunciator;
+    private Annunciator bottomAnnunciator;
     private int padding;
     private int displayHeight;
     private int displayWidth;
@@ -46,6 +36,7 @@ public class SevenSegmentDisplay extends Canvas {
         segments[5] = new Segment(segmentHeight, segmentWidth, true, padding + segmentHeight - segmentWidth, segmentHeight + padding, backgroundColor, segmentColor);
         segments[6] = new Segment(segmentHeight, segmentWidth, false, padding, 2 * segmentHeight + padding - segmentWidth, backgroundColor, segmentColor);
         radixMark = new RadixMark(segmentHeight + segmentWidth + padding,2 * segmentHeight + padding - segmentWidth, segmentWidth, backgroundColor, segmentColor);
+        //topAnnunciator = new Annunciator()
     }
 
     @Override

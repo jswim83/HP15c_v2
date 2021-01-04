@@ -7,7 +7,6 @@ public class RadixMark extends JComponent {
     public static enum State{
         OFF, RADIX, DIGIT_GROUP;
     }
-    //0 = off, 1 = radix, 2 = digit group
     private State state;
     private Color offColor;
     private Color onColor;
