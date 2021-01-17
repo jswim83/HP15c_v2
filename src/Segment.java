@@ -12,7 +12,7 @@ public class Segment extends JComponent implements Serializable {
     public Segment(int longEdge, int shortEdge, boolean vertical, int x, int y, Color offColor, Color onColor){
         this.offColor = offColor;
         this.onColor = onColor;
-        this.active = true;
+        this.active = false;
         segment = new Polygon(new int[6], new int[6], 0);
         var leg = shortEdge / 2;
         if(vertical) {

@@ -19,6 +19,7 @@ public class Digit {
             {false, false, false, false, false, false, false}    //blank
     };
 
+    public static Digit BLANK = new Digit(' ', 13, RadixMark.State.OFF);
     public static Digit ZERO = new Digit('0');
     public static Digit MINUS = new Digit('-', 10, RadixMark.State.OFF);
     public static Digit PERIOD = new Digit('.', 13, RadixMark.State.RADIX);

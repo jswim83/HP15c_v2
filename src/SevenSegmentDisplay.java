@@ -10,8 +10,7 @@ public class SevenSegmentDisplay extends Canvas {
 
     private Segment[] segments;
     private RadixMark radixMark;
-    private Annunciator topAnnunciator;
-    private Annunciator bottomAnnunciator;
+    private Annunciator annunciator;
     private int padding;
     private int displayHeight;
     private int displayWidth;
@@ -20,7 +19,7 @@ public class SevenSegmentDisplay extends Canvas {
     public SevenSegmentDisplay(int segmentHeight, int segmentWidth, int padding, Color backgroundColor, Color segmentColor){
         if(padding < 2 * segmentWidth) {
             padding = 2 * segmentWidth;
-            System.out.println("not enough padding to display decimal place, padding set to minimum " + padding) ;
+            //System.out.println("not enough padding to display decimal place, padding set to minimum " + padding) ;
         }
         this.segments = new Segment[7];
         this.padding = padding;
@@ -35,8 +34,8 @@ public class SevenSegmentDisplay extends Canvas {
         segments[4] = new Segment(segmentHeight, segmentWidth, true, padding, segmentHeight + padding, backgroundColor, segmentColor);
         segments[5] = new Segment(segmentHeight, segmentWidth, true, padding + segmentHeight - segmentWidth, segmentHeight + padding, backgroundColor, segmentColor);
         segments[6] = new Segment(segmentHeight, segmentWidth, false, padding, 2 * segmentHeight + padding - segmentWidth, backgroundColor, segmentColor);
-        radixMark = new RadixMark(segmentHeight + segmentWidth + padding,2 * segmentHeight + padding - segmentWidth, segmentWidth, backgroundColor, segmentColor);
-        //topAnnunciator = new Annunciator()
+        this.radixMark = new RadixMark(segmentHeight + segmentWidth + padding,2 * segmentHeight + padding - segmentWidth, segmentWidth, backgroundColor, segmentColor);
+        this.annunciator = new Annunciator(padding, 2 * segmentHeight + 12 * padding / 7, 3 * segmentWidth / 2, backgroundColor, segmentColor);
     }
 
     @Override
@@ -47,6 +46,7 @@ public class SevenSegmentDisplay extends Canvas {
         for(int i = 0; i < 7; i++)
         this.segments[i].paintComponent(g);
         this.radixMark.paintComponent(g);
+        this.annunciator.paintComponent(g);
     }
 
     public void setDigit(Digit digit){
@@ -60,6 +60,12 @@ public class SevenSegmentDisplay extends Canvas {
     public void setRadixMark(RadixMark.State state){
         active = true;
         this.radixMark.setState(state);
+        repaint();
+    }
+
+    public void setAnnunciatorState(Annunciator.State state){
+        active = true;
+        this.annunciator.setState(state);
         repaint();
     }
 

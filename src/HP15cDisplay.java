@@ -48,7 +48,7 @@ public class HP15cDisplay extends JPanel {
         this.commandPropts = new JLabel[10];
         var segmentHeight = 72;
         var segmentWidth = 12;
-        var padding = 0;
+        var padding = 24;
         var segmentPanel = new JPanel(new GridLayout());
         for (int i = 0; i < displays.length; i++) {
             displays[i] = new SevenSegmentDisplay(segmentHeight, segmentWidth, padding, Color.LIGHT_GRAY, Color.DARK_GRAY);
@@ -80,8 +80,7 @@ public class HP15cDisplay extends JPanel {
         repaint();
     }
 
-    public void drawBuffer(String buffer) {
-        clear();
+    public void drawBuffer(String buffer, HP15c.AngleMode angleMode) {
         if (buffer.isEmpty())
             return;
         var bufferIndex = 0;
@@ -90,31 +89,37 @@ public class HP15cDisplay extends JPanel {
             displays[0].setDigit(Digit.MINUS);
             bufferIndex++;
         }
-        while (bufferIndex < buffer.length() && displayIndex < 11) {
-            var currentChar = buffer.charAt(bufferIndex);
-            switch (currentChar) {
-                case '.':
-                    displays[displayIndex - 1].setRadixMark(RadixMark.State.RADIX);
-                    break;
-                case ',':
-                    displays[displayIndex - 1].setRadixMark(RadixMark.State.DIGIT_GROUP);
-                    break;
-                case 'E':
-                    displayIndex = buffer.charAt(bufferIndex + 1) == '-' ? 8 : 9;
-                    break;
-                case '-':
-                    displays[displayIndex++].setDigit(Digit.MINUS);
-                    break;
-                default:
-                    displays[displayIndex++].setDigit(new Digit(currentChar));
-                    break;
+        else
+            displays[0].setDigit(Digit.BLANK);
+        while (displayIndex < displays.length) {
+            if (bufferIndex < buffer.length()) {
+                var currentChar = buffer.charAt(bufferIndex);
+                switch (currentChar) {
+                    case '.':
+                        displays[displayIndex - 1].setRadixMark(RadixMark.State.RADIX);
+                        break;
+                    case ',':
+                        displays[displayIndex - 1].setRadixMark(RadixMark.State.DIGIT_GROUP);
+                        break;
+                    case 'E':
+                        displayIndex = buffer.charAt(bufferIndex + 1) == '-' ? 8 : 9;
+                        break;
+                    case '-':
+                        displays[displayIndex++].setDigit(Digit.MINUS);
+                        break;
+                    default:
+                        displays[displayIndex++].setDigit(new Digit(currentChar));
+                        break;
+                }
+                bufferIndex++;
             }
-            bufferIndex++;
+            else
+                displays[displayIndex++].setDigit(Digit.BLANK);
         }
     }
 
     public void drawProgram(int programIndex, HP15c.Input input) {
-        clear();
+        this.clear();
         var programIndexString = programStepFormatter.format((double) programIndex);
         for (int i = 0; i < 3; i++)
             displays[i].setDigit(new Digit(programIndexString.charAt(i)));
@@ -122,12 +127,6 @@ public class HP15cDisplay extends JPanel {
         if (input != null) {
             for (int j = input.code.length() - 1; j > -1; j--)
                 displays[displayIndex--].setDigit(new Digit(input.code.charAt(j)));
-        }
-    }
-
-    public void clear() {
-        for (int i = 0; i < 11; i++) {
-            displays[i].clear();
         }
     }
 
@@ -157,6 +156,29 @@ public class HP15cDisplay extends JPanel {
                 commandPropts[i++].setText(matchingCommands[j]);
         }
         return null;
+    }
+
+    public void drawAngleAnnunciator(Annunciator.State state) {
+        displays[7].setAnnunciatorState(state);
+    }
+
+    public void drawProgramAnnunciator(boolean on){
+        if(on)
+            displays[10].setAnnunciatorState(Annunciator.State.PROGRAM);
+        else
+            displays[10].setAnnunciatorState(Annunciator.State.OFF);
+    }
+
+    public void drawComplexAnnunciator(boolean on){
+        if(on)
+            displays[9].setAnnunciatorState(Annunciator.State.COMPLEX);
+        else
+            displays[9].setAnnunciatorState(Annunciator.State.OFF);
+    }
+
+    public void clear(){
+        for(int i = 0; i < displays.length; i++)
+            displays[i].setDigit(Digit.BLANK);
     }
 
     public String getCommand() {
