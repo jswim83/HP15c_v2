@@ -12,10 +12,10 @@ public class HP15c extends JFrame implements KeyListener {
     private final HP15cDisplay display;
     private String xRegisterString = "0";
     private final LinkedList<Character> commandBuffer;
-    private final double[] stack;
-    private final Input[] programMemory = new Input[448];
+    private double[] stack;
+    private Input[] programMemory = new Input[448];
     private final Stack<Integer> programStack = new Stack<>();
-    private final double[] registers = new double[67];
+    private double[] registers = new double[67];
     private static final HashMap<String, Input> operationMap = new HashMap<>(20);
     private static final HashMap<String, Input> labelMap = new HashMap<>(15);
     private static final HashMap<String, Integer> registerMap = new HashMap<>(21);
@@ -30,6 +30,7 @@ public class HP15c extends JFrame implements KeyListener {
     private DecimalFormat displayFormatter;
     private DecimalFormat fixFormatter;
     private DecimalFormat scientificFormatter;
+    private SettingsWindow settingsFrame;
 
     private static final int XREG = 0;
     private static final int YREG = 1;
@@ -40,7 +41,7 @@ public class HP15c extends JFrame implements KeyListener {
         DIGIT, COMMAND;
     }
 
-    private enum DisplayMode {
+    public enum DisplayMode {
         FIX, SCI, ENG;
     }
 
@@ -85,21 +86,30 @@ public class HP15c extends JFrame implements KeyListener {
         this.fixFormatter = new DecimalFormat(fixPatterns[precision]);
         this.scientificFormatter = new DecimalFormat(scientificPatterns[precision]);
         this.displayFormatter = this.fixFormatter;
+        SwingUtilities.invokeLater(() -> this.settingsFrame = new SettingsWindow(this));
+        this.setTitle("HP 15c");
         this.setDefaultCloseOperation(EXIT_ON_CLOSE);
         this.addKeyListener(this);
         this.add(display);
         this.pack();
         this.setVisible(true);
-        display.drawBuffer(displayFormatter.format(Double.parseDouble(xRegisterString)), angleMode);
+        display.drawBuffer(displayFormatter.format(Double.parseDouble(xRegisterString)));
         display.drawAngleAnnunciator(Annunciator.State.OFF);
     }
 
     public static void main(String... args) {
-        SwingUtilities.invokeLater(new Runnable() {
-            public void run() {
-                new HP15c();
-            }
-        });
+        SwingUtilities.invokeLater(() -> new HP15c());
+    }
+
+    public void loadSettings(HP15cState state){
+        this.stack = state.stack;
+        this.programMemory = state.programMemory;
+        this.registers = state.registers;
+        this.programMode = state.programMode;
+        this.programIndex = state.programIndex;
+        this.displayMode = state.displayMode;
+        this.angleMode = state.angleMode;
+        this.precision = state.precision;
     }
 
     @Override
@@ -166,9 +176,13 @@ public class HP15c extends JFrame implements KeyListener {
 
     private String formatDisplay() {
         var xReg = stack[XREG];
+        System.out.println(xReg);
+        if (xReg >= 1e100 || xReg <= 1e-100) {
+            return "error9";
+        }
         switch (displayMode) {
             case FIX:
-                if (((xReg > -1e-1 && xReg < 1e-1) || (xReg <= -1e10 && xReg >= 1e10)) && stack[XREG] != 0.0) {
+                if (((xReg > -1e-1 && xReg < 1e-1) || (xReg <= -1e10 || xReg >= 1e10)) && stack[XREG] != 0.0) {
                     scientificFormatter.applyPattern(scientificPatterns[precision]);
                     return scientificFormatter.format(xReg);
                 }
@@ -217,7 +231,7 @@ public class HP15c extends JFrame implements KeyListener {
         }
         stack[XREG] = Double.parseDouble(xRegisterString);
         if (!programExecution)
-            display.drawBuffer(xRegisterString, angleMode);
+            display.drawBuffer(xRegisterString);
     }
 
     private void executeProgram(HP15c.Input label) {
@@ -227,7 +241,7 @@ public class HP15c extends JFrame implements KeyListener {
             while (programMemory[programIndex] != null && programExecution) {
                 programMemory[programIndex++].input();
             }
-            display.drawBuffer(displayFormatter.format(stack[XREG]), angleMode);
+            display.drawBuffer(displayFormatter.format(stack[XREG]));
         }
     }
 
@@ -370,7 +384,7 @@ public class HP15c extends JFrame implements KeyListener {
                 liftStack();
                 xRegisterString = "";
                 if (!programExecution)
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
             }
         });
 
@@ -401,12 +415,12 @@ public class HP15c extends JFrame implements KeyListener {
                                 stack[XREG] = Double.parseDouble(xRegisterString);
                                 break;
                         }
-                        display.drawBuffer(xRegisterString, angleMode);
+                        display.drawBuffer(xRegisterString);
                     }
                     else {
                         if (commandBuffer.isEmpty()) {
                             stack[XREG] = 0.0;
-                            display.drawBuffer(formatDisplay(), angleMode);
+                            display.drawBuffer(formatDisplay());
                         }
                         else
                             commandBuffer.clear();
@@ -464,7 +478,17 @@ public class HP15c extends JFrame implements KeyListener {
                     stack[XREG] = Double.parseDouble(xRegisterString);
                 }
                 if (!programExecution)
-                    display.drawBuffer(xRegisterString, angleMode);
+                    display.drawBuffer(xRegisterString);
+            }
+        });
+
+        operationMap.put("settings", new Input("") {
+            @Override
+            public void input() {
+                if(programMode)
+                    return;
+                settingsFrame.setVisible(true);
+
             }
         });
 
@@ -474,7 +498,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stack[XREG] = 0.0;
                 if (!programExecution)
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
             }
         });
 
@@ -491,12 +515,12 @@ public class HP15c extends JFrame implements KeyListener {
                         }
                         stack[XREG] *= -1.0;
                         if (!programExecution)
-                            display.drawBuffer(xRegisterString, angleMode);
+                            display.drawBuffer(xRegisterString);
                     }
                     else {
                         stack[XREG] *= -1.0;
                         if (!programExecution)
-                            display.drawBuffer(formatDisplay(), angleMode);
+                            display.drawBuffer(formatDisplay());
                     }
                 }
                 else {
@@ -529,7 +553,7 @@ public class HP15c extends JFrame implements KeyListener {
                             else {
                                 registers[registerMap.get(address)] = stack[XREG];
                                 stackLift = true;
-                                display.drawBuffer(formatDisplay(), angleMode);
+                                display.drawBuffer(formatDisplay());
                             }
                             removeKeyListener(getKeyListeners()[0]);
                             addKeyListener(HP15c.this);
@@ -541,7 +565,7 @@ public class HP15c extends JFrame implements KeyListener {
                                 display.drawProgram(programIndex, programMemory[programIndex]);
                             else {
                                 stackLift = true;
-                                display.drawBuffer(formatDisplay(), angleMode);
+                                display.drawBuffer(formatDisplay());
                             }
                             removeKeyListener(getKeyListeners()[0]);
                             addKeyListener(HP15c.this);
@@ -586,7 +610,7 @@ public class HP15c extends JFrame implements KeyListener {
                                 liftStack();
                                 stack[XREG] = registers[registerMap.get(address)];
                                 stackLift = true;
-                                display.drawBuffer(formatDisplay(), angleMode);
+                                display.drawBuffer(formatDisplay());
                             }
                             removeKeyListener(getKeyListeners()[0]);
                             addKeyListener(HP15c.this);
@@ -598,7 +622,7 @@ public class HP15c extends JFrame implements KeyListener {
                                 display.drawProgram(programIndex, programMemory[programIndex]);
                             else {
                                 stackLift = true;
-                                display.drawBuffer(formatDisplay(), angleMode);
+                                display.drawBuffer(formatDisplay());
                             }
                             removeKeyListener(getKeyListeners()[0]);
                             addKeyListener(HP15c.this);
@@ -629,7 +653,7 @@ public class HP15c extends JFrame implements KeyListener {
                 stack[TREG] = temp;
                 xRegisterString = "";
                 if (!programExecution)
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                 printStack();
             }
         });
@@ -644,7 +668,7 @@ public class HP15c extends JFrame implements KeyListener {
                 stack[XREG] = temp;
                 xRegisterString = "";
                 if (!programExecution)
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                 printStack();
             }
         });
@@ -658,7 +682,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -673,7 +697,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -688,7 +712,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -703,7 +727,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -718,7 +742,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -733,7 +757,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -748,7 +772,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -763,7 +787,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -778,7 +802,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -793,7 +817,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -808,7 +832,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -823,7 +847,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -836,7 +860,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -849,7 +873,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -872,7 +896,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -895,7 +919,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -918,7 +942,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -941,7 +965,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -964,7 +988,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -987,7 +1011,7 @@ public class HP15c extends JFrame implements KeyListener {
                 xRegisterString = "";
                 stackLift = true;
                 if (!programExecution) {
-                    display.drawBuffer(formatDisplay(), angleMode);
+                    display.drawBuffer(formatDisplay());
                     printStack();
                 }
             }
@@ -1015,7 +1039,7 @@ public class HP15c extends JFrame implements KeyListener {
                         else {
                             displayMode = DisplayMode.FIX;
                             precision = Character.getNumericValue(inputChar);
-                            display.drawBuffer(formatDisplay(), angleMode);
+                            display.drawBuffer(formatDisplay());
                         }
                         removeKeyListener(getKeyListeners()[0]);
                         addKeyListener(HP15c.this);
@@ -1056,7 +1080,7 @@ public class HP15c extends JFrame implements KeyListener {
                         else {
                             displayMode = DisplayMode.SCI;
                             precision = Character.getNumericValue(inputChar);
-                            display.drawBuffer(formatDisplay(), angleMode);
+                            display.drawBuffer(formatDisplay());
                         }
                         removeKeyListener(getKeyListeners()[0]);
                         addKeyListener(HP15c.this);
@@ -1097,7 +1121,7 @@ public class HP15c extends JFrame implements KeyListener {
                         else {
                             displayMode = DisplayMode.ENG;
                             precision = Character.getNumericValue(inputChar);
-                            display.drawBuffer(formatDisplay(), angleMode);
+                            display.drawBuffer(formatDisplay());
                         }
                         removeKeyListener(getKeyListeners()[0]);
                         addKeyListener(HP15c.this);
@@ -1150,7 +1174,7 @@ public class HP15c extends JFrame implements KeyListener {
                 if (programMode)
                     display.drawProgram(programIndex, programMemory[programIndex]);
                 else
-                    display.drawBuffer(displayFormatter.format(stack[XREG]), angleMode);
+                    display.drawBuffer(displayFormatter.format(stack[XREG]));
                 display.drawProgramAnnunciator(programMode);
             }
         });

@@ -17,10 +17,10 @@ public class HP15cDisplay extends JPanel {
             /*A*/       {"alog"},
             /*B*/       {},
             /*C*/       {"chs", "clx", "cos"},
-            /*D*/       {"div"},
+            /*D*/       {"deg", "div"},
             /*E*/       {"eng", "exp"},
             /*F*/       {"fix"},
-            /*G*/       {},
+            /*G*/       {"grad"},
             /*H*/       {"hcos", "hsin", "htan"},
             /*I*/       {"inv"},
             /*J*/       {},
@@ -31,8 +31,8 @@ public class HP15cDisplay extends JPanel {
             /*O*/       {},
             /*P*/       {"pch", "per", "plus", "pow", "pr"},
             /*Q*/       {},
-            /*R*/       {"rcl", "rd", "ru"},
-            /*S*/       {"sci", "sin", "sto", "sub", "sqr", "sqt"},
+            /*R*/       {"rad", "rcl", "rd", "ru"},
+            /*S*/       {"sci", "settings", "sin", "sto", "sub", "sqr", "sqt"},
             /*T*/       {"tan"},
             /*U*/       {},
             /*V*/       {},
@@ -80,7 +80,8 @@ public class HP15cDisplay extends JPanel {
         repaint();
     }
 
-    public void drawBuffer(String buffer, HP15c.AngleMode angleMode) {
+    public void drawBuffer(String buffer) {
+        clear();
         if (buffer.isEmpty())
             return;
         var bufferIndex = 0;
@@ -106,6 +107,15 @@ public class HP15cDisplay extends JPanel {
                         break;
                     case '-':
                         displays[displayIndex++].setDigit(Digit.MINUS);
+                        break;
+                    case 'e':
+                        displays[displayIndex++].setDigit(Digit.E);
+                        break;
+                    case 'r':
+                        displays[displayIndex++].setDigit(Digit.R);
+                        break;
+                    case 'o':
+                        displays[displayIndex++].setDigit(Digit.O);
                         break;
                     default:
                         displays[displayIndex++].setDigit(new Digit(currentChar));
