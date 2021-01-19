@@ -1,6 +1,7 @@
 import javax.swing.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.io.Serializable;
 import java.text.DecimalFormat;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -27,52 +28,52 @@ public class HP15c extends JFrame implements KeyListener {
     private DisplayMode displayMode = DisplayMode.FIX;
     private AngleMode angleMode = AngleMode.RAD;
     private int precision;
-    private DecimalFormat displayFormatter;
-    private DecimalFormat fixFormatter;
-    private DecimalFormat scientificFormatter;
-    private SettingsWindow settingsFrame;
+    private final DecimalFormat displayFormatter;
+    private final DecimalFormat fixFormatter;
+    private final DecimalFormat scientificFormatter;
 
-    private static final int XREG = 0;
-    private static final int YREG = 1;
-    private static final int ZREG = 2;
-    private static final int TREG = 3;
+    public static final int XREG = 0;
+    public static final int YREG = 1;
+    public static final int ZREG = 2;
+    public static final int TREG = 3;
 
     private enum LastEntry {
-        DIGIT, COMMAND;
+        DIGIT, COMMAND
     }
 
-    public enum DisplayMode {
-        FIX, SCI, ENG;
+    public enum DisplayMode implements Serializable {
+        FIX, SCI, ENG
     }
 
-    public enum AngleMode {
-        DEG, RAD, GRAD;
+    public enum AngleMode implements Serializable {
+        DEG, RAD, GRAD
     }
 
-    private static final String[] fixPatterns = {
+    public static final String[] fixPatterns = {
             "#,##0.", "#,##0.0", "#,##0.00", "#,##0.000", "#,##0.0000",
             "#,##0.00000", "#,##0.000000", "#,##0.0000000", "#,##0.00000000", "#,##0.000000000"
     };
-    private static final String[] scientificPatterns = {
-            "0.E00", "0.0E00", "0.00E00", "0.000E00", "0.0000E00", "0.00000E00",
-            "0.000000E00", "0.0000000E00", "0.00000000E00", "0.000000000E00",
+    public static final String[] scientificPatterns = {
+            "0.E00", "0.0E00", "0.00E00", "0.000E00", "0.0000E00", "0.00000E00", "0.000000E00",
     };
 
-    public abstract class Input {
+    public abstract class Input implements Serializable {
         public String code;
+        public String name;
 
-        public Input(String code) {
+        public Input(String code, String name) {
             this.code = code;
+            this.name = name;
         }
 
         public abstract void input();
     }
 
-    private abstract class ValuedInput extends Input {
+    private abstract class ValuedInput extends Input implements Serializable {
         public String address;
 
-        public ValuedInput(String code, String address) {
-            super(code);
+        public ValuedInput(String code, String address, String name) {
+            super(code, name);
             this.address = address;
         }
     }
@@ -86,7 +87,6 @@ public class HP15c extends JFrame implements KeyListener {
         this.fixFormatter = new DecimalFormat(fixPatterns[precision]);
         this.scientificFormatter = new DecimalFormat(scientificPatterns[precision]);
         this.displayFormatter = this.fixFormatter;
-        SwingUtilities.invokeLater(() -> this.settingsFrame = new SettingsWindow(this));
         this.setTitle("HP 15c");
         this.setDefaultCloseOperation(EXIT_ON_CLOSE);
         this.addKeyListener(this);
@@ -98,10 +98,10 @@ public class HP15c extends JFrame implements KeyListener {
     }
 
     public static void main(String... args) {
-        SwingUtilities.invokeLater(() -> new HP15c());
+        SwingUtilities.invokeLater(HP15c::new);
     }
 
-    public void loadSettings(HP15cState state){
+    public void loadSettings(HP15cState state) {
         this.stack = state.stack;
         this.programMemory = state.programMemory;
         this.registers = state.registers;
@@ -177,7 +177,7 @@ public class HP15c extends JFrame implements KeyListener {
     private String formatDisplay() {
         var xReg = stack[XREG];
         System.out.println(xReg);
-        if (xReg >= 1e100 || xReg <= 1e-100) {
+        if ((xReg >= 1e100 || xReg <= 1e-100) && xReg != 0) {
             return "error9";
         }
         switch (displayMode) {
@@ -256,8 +256,13 @@ public class HP15c extends JFrame implements KeyListener {
         return null;
     }
 
+    public HP15cState getHP15cState() {
+        var state = new HP15cState(stack, programMemory, registers, programMode, programIndex, displayMode, angleMode, precision);
+        return state;
+    }
+
     private void setupOperations() {
-        operationMap.put(String.valueOf(KeyEvent.VK_0), new Input("00") {
+        operationMap.put(String.valueOf(KeyEvent.VK_0), new Input("00", "0") {
             @Override
             public void input() {
                 if (!programMode)
@@ -269,7 +274,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_1), new Input("01") {
+        operationMap.put(String.valueOf(KeyEvent.VK_1), new Input("01", "1") {
             @Override
             public void input() {
                 if (!programMode)
@@ -281,7 +286,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_2), new Input("02") {
+        operationMap.put(String.valueOf(KeyEvent.VK_2), new Input("02", "2") {
             @Override
             public void input() {
                 if (!programMode)
@@ -293,7 +298,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_3), new Input("03") {
+        operationMap.put(String.valueOf(KeyEvent.VK_3), new Input("03", "3") {
             @Override
             public void input() {
                 if (!programMode)
@@ -305,7 +310,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_4), new Input("04") {
+        operationMap.put(String.valueOf(KeyEvent.VK_4), new Input("04", "4") {
             @Override
             public void input() {
                 if (!programMode)
@@ -317,7 +322,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_5), new Input("05") {
+        operationMap.put(String.valueOf(KeyEvent.VK_5), new Input("05", "5") {
             @Override
             public void input() {
                 if (!programMode)
@@ -329,7 +334,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_6), new Input("06") {
+        operationMap.put(String.valueOf(KeyEvent.VK_6), new Input("06", "6") {
             @Override
             public void input() {
                 if (!programMode)
@@ -341,19 +346,19 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_7), new Input("07") {
-            @Override
-            public void input() {
-                if (!programMode)
-                    inputDigit("7");
-                else {
-                    programMemory[++programIndex] = this;
-                    display.drawProgram(programIndex, this);
-                }
+        operationMap.put(String.valueOf(KeyEvent.VK_7), new Input("07", "7") {
+        @Override
+        public void input () {
+            if (!programMode)
+                inputDigit("7");
+            else {
+                programMemory[++programIndex] = this;
+                display.drawProgram(programIndex, this);
             }
+        }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_8), new Input("08") {
+        operationMap.put(String.valueOf(KeyEvent.VK_8), new Input("08", "8") {
             @Override
             public void input() {
                 if (!programMode)
@@ -365,7 +370,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_9), new Input("09") {
+        operationMap.put(String.valueOf(KeyEvent.VK_9), new Input("09", "9") {
             @Override
             public void input() {
                 if (!programMode)
@@ -377,7 +382,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_ENTER), new Input("16") {
+        operationMap.put(String.valueOf(KeyEvent.VK_ENTER), new Input("16", "ENTER") {
             @Override
             public void input() {
                 lastEntry = LastEntry.COMMAND;
@@ -388,7 +393,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_BACK_SPACE), new Input("35") {
+        operationMap.put(String.valueOf(KeyEvent.VK_BACK_SPACE), new Input("35", "BACKSPACE") {
             @Override
             public void input() {
                 if (!programMode) {
@@ -443,7 +448,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_SPACE), new Input("00") {
+        operationMap.put(String.valueOf(KeyEvent.VK_SPACE), new Input("00", "COMMAND ENTER") {
             @Override
             public void input() {
                 if (!commandBuffer.isEmpty()) {
@@ -460,7 +465,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_PERIOD), new Input("48") {
+        operationMap.put(String.valueOf(KeyEvent.VK_PERIOD), new Input("48", "DECIMAL") {
             @Override
             public void input() {
                 lastEntry = LastEntry.DIGIT;
@@ -482,17 +487,26 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("settings", new Input("") {
+        operationMap.put("settings", new Input("", "SETTINGS") {
             @Override
             public void input() {
-                if(programMode)
+                if (programMode)
                     return;
-                settingsFrame.setVisible(true);
-
+                SwingUtilities.invokeLater(() -> new SettingsWindow(HP15c.this));
             }
         });
 
-        operationMap.put("clx", new Input("35") {
+        operationMap.put("debug", new Input("", "DEBUG") {
+            @Override
+            public void input() {
+                if (programMode)
+                    return;
+                var state = getHP15cState();
+                SwingUtilities.invokeLater(() -> new HP15cDebugWindow(HP15c.this));
+            }
+        });
+
+        operationMap.put("clx", new Input("35", "CLX") {
             @Override
             public void input() {
                 xRegisterString = "";
@@ -502,7 +516,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("chs", new Input("16") {
+        operationMap.put("chs", new Input("16", "CHS") {
             @Override
             public void input() {
                 if (!programMode) {
@@ -530,7 +544,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("sto", new ValuedInput("44", "") {
+        operationMap.put("sto", new ValuedInput("44", "", "STO") {
             @Override
             public void input() {
                 address = "";
@@ -542,7 +556,7 @@ public class HP15c extends JFrame implements KeyListener {
                         address = address + inputString;
                         if (registerMap.containsKey(address)) {
                             if (programMode) {
-                                programMemory[++programIndex] = new ValuedInput("44", address) {
+                                programMemory[++programIndex] = new ValuedInput("44", address, address) {
                                     @Override
                                     public void input() {
                                         registers[registerMap.get(address)] = stack[XREG];
@@ -586,7 +600,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("rcl", new ValuedInput("45", "") {
+        operationMap.put("rcl", new ValuedInput("45", "", "RCL") {
             @Override
             public void input() {
                 address = "";
@@ -598,7 +612,7 @@ public class HP15c extends JFrame implements KeyListener {
                         address = address + inputString;
                         if (registerMap.containsKey(address)) {
                             if (programMode) {
-                                programMemory[++programIndex] = new ValuedInput("44", address) {
+                                programMemory[++programIndex] = new ValuedInput("44", address, address) {
                                     @Override
                                     public void input() {
                                         stack[XREG] = registers[registerMap.get(address)];
@@ -643,7 +657,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("rd", new Input("33") {
+        operationMap.put("rd", new Input("33", "RD") {
             @Override
             public void input() {
                 var temp = stack[XREG];
@@ -658,7 +672,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("ru", new Input("33") {
+        operationMap.put("ru", new Input("33", "RU") {
             @Override
             public void input() {
                 var temp = stack[TREG];
@@ -673,7 +687,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("plus", new Input("40") {
+        operationMap.put("plus", new Input("40", "PLUS") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] + stack[XREG];
@@ -688,7 +702,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("sub", new Input("30") {
+        operationMap.put("sub", new Input("30", "SUB") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] - stack[XREG];
@@ -703,7 +717,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("mult", new Input("20") {
+        operationMap.put("mult", new Input("20", "MULT") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] * stack[XREG];
@@ -718,7 +732,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("div", new Input("10") {
+        operationMap.put("div", new Input("10", "DIV") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] / stack[XREG];
@@ -733,7 +747,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("sqt", new Input("11") {
+        operationMap.put("sqt", new Input("11", "SQT") {
             @Override
             public void input() {
                 stack[XREG] = Math.sqrt(stack[XREG]);
@@ -748,7 +762,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("exp", new Input("12") {
+        operationMap.put("exp", new Input("12", "EXP") {
             @Override
             public void input() {
                 stack[XREG] = Math.exp(stack[XREG]);
@@ -763,7 +777,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("alog", new Input("13") {
+        operationMap.put("alog", new Input("13", "ALOG") {
             @Override
             public void input() {
                 stack[XREG] = Math.pow(10.0, stack[XREG]);
@@ -778,7 +792,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("yx", new Input("14") {
+        operationMap.put("yx", new Input("14", "YX") {
             @Override
             public void input() {
                 stack[XREG] = Math.pow(stack[YREG], stack[XREG]);
@@ -793,7 +807,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("inv", new Input("15") {
+        operationMap.put("inv", new Input("15", "INV") {
             @Override
             public void input() {
                 stack[XREG] = 1.0 / stack[XREG];
@@ -808,7 +822,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("sqr", new Input("11") {
+        operationMap.put("sqr", new Input("11", "SQR") {
             @Override
             public void input() {
                 stack[XREG] = stack[XREG] * stack[XREG];
@@ -823,7 +837,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("ln", new Input("12") {
+        operationMap.put("ln", new Input("12", "LN") {
             @Override
             public void input() {
                 stack[XREG] = Math.log(stack[XREG]);
@@ -838,7 +852,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("log", new Input("13") {
+        operationMap.put("log", new Input("13", "LOG") {
             @Override
             public void input() {
                 stack[XREG] = Math.log10(stack[XREG]);
@@ -853,7 +867,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("per", new Input("14") {
+        operationMap.put("per", new Input("14", "PER") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] * .01 * stack[XREG];
@@ -866,7 +880,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("pch", new Input("15") {
+        operationMap.put("pch", new Input("15", "PCH") {
             @Override
             public void input() {
                 stack[XREG] = (stack[XREG] - stack[YREG]) * 100 / stack[YREG];
@@ -879,7 +893,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("sin", new Input("23") {
+        operationMap.put("sin", new Input("23", "SIN") {
             @Override
             public void input() {
                 switch (angleMode) {
@@ -902,7 +916,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("cos", new Input("24") {
+        operationMap.put("cos", new Input("24", "COS") {
             @Override
             public void input() {
                 switch (angleMode) {
@@ -925,7 +939,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("tan", new Input("25") {
+        operationMap.put("tan", new Input("25", "TAN") {
             @Override
             public void input() {
                 switch (angleMode) {
@@ -948,7 +962,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("hsin", new Input("23") {
+        operationMap.put("hsin", new Input("23", "HSIN") {
             @Override
             public void input() {
                 switch (angleMode) {
@@ -971,7 +985,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("hcos", new Input("24") {
+        operationMap.put("hcos", new Input("24", "HCOS") {
             @Override
             public void input() {
                 switch (angleMode) {
@@ -994,7 +1008,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("htan", new Input("25") {
+        operationMap.put("htan", new Input("25", "HTAN") {
             @Override
             public void input() {
                 switch (angleMode) {
@@ -1017,7 +1031,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("fix", new Input("17") {
+        operationMap.put("fix", new Input("17", "FIX") {
             @Override
             public void input() {
                 removeKeyListener(HP15c.this);
@@ -1027,7 +1041,7 @@ public class HP15c extends JFrame implements KeyListener {
                         System.out.println("inner listener");
                         var inputChar = e.getKeyChar();
                         if (programMode) {
-                            programMemory[++programIndex] = new ValuedInput("17", String.valueOf(inputChar)) {
+                            programMemory[++programIndex] = new ValuedInput("17", String.valueOf(inputChar), String.valueOf(inputChar)) {
                                 @Override
                                 public void input() {
                                     displayMode = DisplayMode.FIX;
@@ -1058,7 +1072,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("sci", new Input("18") {
+        operationMap.put("sci", new Input("18", "SCI") {
             @Override
             public void input() {
                 removeKeyListener(HP15c.this);
@@ -1068,7 +1082,7 @@ public class HP15c extends JFrame implements KeyListener {
                         System.out.println("inner listener");
                         var inputChar = e.getKeyChar();
                         if (programMode) {
-                            programMemory[++programIndex] = new ValuedInput("17", String.valueOf(inputChar)) {
+                            programMemory[++programIndex] = new ValuedInput("17", String.valueOf(inputChar), String.valueOf(inputChar)) {
                                 @Override
                                 public void input() {
                                     displayMode = DisplayMode.SCI;
@@ -1079,7 +1093,10 @@ public class HP15c extends JFrame implements KeyListener {
                         }
                         else {
                             displayMode = DisplayMode.SCI;
-                            precision = Character.getNumericValue(inputChar);
+                            var tempPrecision = Character.getNumericValue(inputChar);
+                            if(tempPrecision > 6)
+                                tempPrecision = 6;
+                            precision = tempPrecision;
                             display.drawBuffer(formatDisplay());
                         }
                         removeKeyListener(getKeyListeners()[0]);
@@ -1099,7 +1116,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("eng", new Input("19") {
+        operationMap.put("eng", new Input("19", "ENG") {
             @Override
             public void input() {
                 removeKeyListener(HP15c.this);
@@ -1109,7 +1126,7 @@ public class HP15c extends JFrame implements KeyListener {
                         System.out.println("inner listener");
                         var inputChar = e.getKeyChar();
                         if (programMode) {
-                            programMemory[++programIndex] = new ValuedInput("17", String.valueOf(inputChar)) {
+                            programMemory[++programIndex] = new ValuedInput("17", String.valueOf(inputChar), String.valueOf(inputChar)) {
                                 @Override
                                 public void input() {
                                     displayMode = DisplayMode.ENG;
@@ -1129,7 +1146,6 @@ public class HP15c extends JFrame implements KeyListener {
 
                     @Override
                     public void keyPressed(KeyEvent e) {
-
                     }
 
                     @Override
@@ -1140,7 +1156,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("deg", new Input("17") {
+        operationMap.put("deg", new Input("17", "DEG") {
             @Override
             public void input() {
                 angleMode = AngleMode.DEG;
@@ -1148,7 +1164,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("rad", new Input("17") {
+        operationMap.put("rad", new Input("17", "RAD") {
             @Override
             public void input() {
                 angleMode = AngleMode.RAD;
@@ -1156,7 +1172,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("grad", new Input("17") {
+        operationMap.put("grad", new Input("17", "GRAD") {
             @Override
             public void input() {
                 angleMode = AngleMode.GRAD;
@@ -1166,7 +1182,7 @@ public class HP15c extends JFrame implements KeyListener {
 
 
         //program operations
-        operationMap.put("pr", new Input("50") {
+        operationMap.put("pr", new Input("50", "PR") {
             @Override
             public void input() {
                 programMode = !programMode;
@@ -1179,7 +1195,7 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("lbl", new Input("31") {
+        operationMap.put("lbl", new Input("31", "LBL") {
             @Override
             public void input() {
                 if (!programMode)
@@ -1212,141 +1228,140 @@ public class HP15c extends JFrame implements KeyListener {
             }
         });
 
-        operationMap.put("rtn", new Input("42") {
+        operationMap.put("rtn", new Input("42", "RTN") {
             @Override
             public void input() {
-                if (!programMode || programExecution)
-                    return;
-                if (programStack.isEmpty()) {
-                    programExecution = false;
-                    programIndex = 0;
+                if (programExecution) {
+                    if (programStack.isEmpty()) {
+                        programExecution = false;
+                        programIndex = 0;
+                    }
+                    else
+                        programIndex = programStack.pop();
                 }
-                else {
-                    programIndex = programStack.pop();
-                }
             }
         });
 
-        labelMap.put(String.valueOf(KeyEvent.VK_A), new Input("424611") {
+        labelMap.put(String.valueOf(KeyEvent.VK_A), new Input("424611", "A") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_B), new Input("424612") {
+        labelMap.put(String.valueOf(KeyEvent.VK_B), new Input("424612", "B") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_C), new Input("424613") {
+        labelMap.put(String.valueOf(KeyEvent.VK_C), new Input("424613", "C") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_D), new Input("424614") {
+        labelMap.put(String.valueOf(KeyEvent.VK_D), new Input("424614", "D") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_E), new Input("424615") {
+        labelMap.put(String.valueOf(KeyEvent.VK_E), new Input("424615", "E") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_0), new Input("4246,00") {
+        labelMap.put(String.valueOf(KeyEvent.VK_0), new Input("4246,00", "0") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_1), new Input("4246,01") {
+        labelMap.put(String.valueOf(KeyEvent.VK_1), new Input("4246,01", "1") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_2), new Input("4246,02") {
+        labelMap.put(String.valueOf(KeyEvent.VK_2), new Input("4246,02", "2") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_3), new Input("4246,03") {
+        labelMap.put(String.valueOf(KeyEvent.VK_3), new Input("4246,03", "3") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_4), new Input("4246,04") {
+        labelMap.put(String.valueOf(KeyEvent.VK_4), new Input("4246,04", "4") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_5), new Input("4246,05") {
+        labelMap.put(String.valueOf(KeyEvent.VK_5), new Input("4246,05", "5") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_6), new Input("4246,06") {
+        labelMap.put(String.valueOf(KeyEvent.VK_6), new Input("4246,06", "6") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_7), new Input("4246,07") {
+        labelMap.put(String.valueOf(KeyEvent.VK_7), new Input("4246,07", "7") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_8), new Input("4246,08") {
+        labelMap.put(String.valueOf(KeyEvent.VK_8), new Input("4246,08", "8") {
             @Override
             public void input() {
 
             }
         });
-        labelMap.put(String.valueOf(KeyEvent.VK_9), new Input("4246,09") {
+        labelMap.put(String.valueOf(KeyEvent.VK_9), new Input("4246,09", "9") {
             @Override
             public void input() {
 
             }
         });
 
-        operationMap.put("fa", new Input("00") {
+        operationMap.put("fa", new Input("00", "A") {
             @Override
             public void input() {
                 programExecution = true;
                 executeProgram(labelMap.get(KeyEvent.VK_A));
             }
         });
-        operationMap.put("fb", new Input("00") {
+        operationMap.put("fb", new Input("00", "B") {
             @Override
             public void input() {
                 programExecution = true;
                 executeProgram(labelMap.get(KeyEvent.VK_B));
             }
         });
-        operationMap.put("fc", new Input("00") {
+        operationMap.put("fc", new Input("00", "C") {
             @Override
             public void input() {
                 programExecution = true;
                 executeProgram(labelMap.get(KeyEvent.VK_C));
             }
         });
-        operationMap.put("fd", new Input("00") {
+        operationMap.put("fd", new Input("00", "D") {
             @Override
             public void input() {
                 programExecution = true;
                 executeProgram(labelMap.get(KeyEvent.VK_D));
             }
         });
-        operationMap.put("fe", new Input("00") {
+        operationMap.put("fe", new Input("00", "E") {
             @Override
             public void input() {
                 programExecution = true;
@@ -1374,9 +1389,21 @@ public class HP15c extends JFrame implements KeyListener {
         registerMap.put(".7", 17);
         registerMap.put(".8", 18);
         registerMap.put(".9", 19);
-        registerMap.put("i", 20);
+        registerMap.put("i", 66);
 
 
+    }
+
+    public static HashMap<String, Input> getOperationMap() {
+        return operationMap;
+    }
+
+    public static HashMap<String, Input> getLabelMap() {
+        return labelMap;
+    }
+
+    public static HashMap<String, Integer> getRegisterMap() {
+        return registerMap;
     }
 
     @Override

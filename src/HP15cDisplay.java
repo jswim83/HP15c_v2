@@ -17,7 +17,7 @@ public class HP15cDisplay extends JPanel {
             /*A*/       {"alog"},
             /*B*/       {},
             /*C*/       {"chs", "clx", "cos"},
-            /*D*/       {"deg", "div"},
+            /*D*/       {"debug", "deg", "div"},
             /*E*/       {"eng", "exp"},
             /*F*/       {"fix"},
             /*G*/       {"grad"},
@@ -196,6 +196,10 @@ public class HP15cDisplay extends JPanel {
         commandPropts[currentLabel].setBackground(null);
         currentLabel = 1;
         return command;
+    }
+
+    public static DecimalFormat getProgramStepFormatter() {
+        return programStepFormatter;
     }
 
     public void rightCommand() {
