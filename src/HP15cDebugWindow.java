@@ -36,7 +36,7 @@ public class HP15cDebugWindow extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 state.registers = parseRegisters();
-                target.loadSettings(state);
+                target.loadState(state);
             }
         });
         leftPanel.add(saveButton);

@@ -34,6 +34,11 @@ public class Digit {
     public Digit(char digit){
         this.digitChar = digit;
         this.digit = digits[Character.getNumericValue(digit)];
+    }
+
+    public Digit(char digit, RadixMark.State radixMark){
+        this.digitChar = digit;
+        this.digit = digits[Character.getNumericValue(digit)];
         this.radixMark = radixMark;
     }
 

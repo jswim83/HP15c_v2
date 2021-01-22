@@ -7,13 +7,13 @@ import java.util.Map;
 
 public class HP15cDisplay extends JPanel {
 
-    private SevenSegmentDisplay[] displays;
-    private JLabel[] commandPropts;
+    private final SevenSegmentDisplay[] displays;
+    private final JLabel[] commandPropts;
     private int currentLabel = 1;
 
-    private static DecimalFormat programStepFormatter = new DecimalFormat("000");
-    private static Color highlightColor = new Color(136, 206, 255);
-    private static String[][] commandList = {
+    private static final DecimalFormat programStepFormatter = new DecimalFormat("000");
+    private static final Color highlightColor = new Color(193, 207, 212);
+    private static final String[][] commandList = {
             /*A*/       {"alog"},
             /*B*/       {},
             /*C*/       {"chs", "clx", "cos"},
@@ -31,8 +31,8 @@ public class HP15cDisplay extends JPanel {
             /*O*/       {},
             /*P*/       {"pch", "per", "plus", "pow", "pr"},
             /*Q*/       {},
-            /*R*/       {"rad", "rcl", "rd", "ru"},
-            /*S*/       {"sci", "settings", "sin", "sto", "sub", "sqr", "sqt"},
+            /*R*/       {"rad", "rcl", "rd", "rtn", "ru"},
+            /*S*/       {"sci", "settings", "sin", "solve", "sto", "sub", "sqr", "sqt"},
             /*T*/       {"tan"},
             /*U*/       {},
             /*V*/       {},
@@ -70,8 +70,8 @@ public class HP15cDisplay extends JPanel {
             commandPropts[i].setOpaque(true);
             commandPanelInner.add(commandPropts[i]);
         }
-        //commandPropts[0].setBackground(new Color(192, 214, 228));
         commandPropts[0].setFont(commandInputFont.deriveFont(attributes));
+        commandPropts[0].setBackground(highlightColor);
         commandPanelOuter.add(new JPanel());
         commandPanelOuter.add(commandPanelInner);
         this.add(segmentPanel, BorderLayout.CENTER);
@@ -133,22 +133,40 @@ public class HP15cDisplay extends JPanel {
         var programIndexString = programStepFormatter.format((double) programIndex);
         for (int i = 0; i < 3; i++)
             displays[i].setDigit(new Digit(programIndexString.charAt(i)));
+        displays[3].setDigit(Digit.MINUS);
         var displayIndex = 10;
         if (input != null) {
-            for (int j = input.code.length() - 1; j > -1; j--)
-                displays[displayIndex--].setDigit(new Digit(input.code.charAt(j)));
+            char currentChar;
+            var digitGroup = false;
+            for (int j = input.code.length() - 1; j > -1; j--) {
+                currentChar = input.code.charAt(j);
+
+                switch (currentChar){
+                    case ',':
+                        digitGroup = true;
+                        break;
+                    case ' ':
+                        displays[displayIndex--].setDigit(Digit.BLANK);
+                        break;
+                    default:
+                        Digit currentDigit;
+                        if(digitGroup){
+                            currentDigit = new Digit(currentChar, RadixMark.State.DIGIT_GROUP);
+                            digitGroup = false;
+                        }
+                        else
+                            currentDigit = new Digit(currentChar);
+                        displays[displayIndex--].setDigit(currentDigit);
+                        break;
+                }
+            }
         }
     }
 
-    public String updateCommandDisplay(LinkedList<Character> command) {
-        for (int k = 1; k < commandPropts.length; k++) {
-            commandPropts[k].setText(null);
-            commandPropts[k].setBackground(null);
-        }
-        if (command.size() < 1) {
-            commandPropts[0].setText(null);
-            return null;
-        }
+    public void updateCommandDisplay(LinkedList<Character> command) {
+        clearCommandPrompts();
+        if (command.isEmpty())
+            return;
         var i = 0;
         var commandChars = new char[command.size()];
         for (char c : command)
@@ -159,13 +177,22 @@ public class HP15cDisplay extends JPanel {
         String[] matchingCommands = commandList[letter];
         i = 1;
         for (int j = 0; j < commandPropts.length && j < matchingCommands.length; j++) {
-            commandPropts[1].setBackground(highlightColor);
             if (matchingCommands[j].equals(commandString))
-                return commandString;
+                return;
             if (matchingCommands[j].contains(commandString))
                 commandPropts[i++].setText(matchingCommands[j]);
         }
-        return null;
+    }
+
+    public void clearCommandPrompts(){
+        for (int k = 0; k < commandPropts.length; k++) {
+            commandPropts[k].setText(null);
+        }
+    }
+
+    public void setCommandPropt(String command){
+        commandPropts[0].setText(command);
+        repaint();
     }
 
     public void drawAngleAnnunciator(Annunciator.State state) {

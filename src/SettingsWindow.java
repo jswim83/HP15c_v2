@@ -28,20 +28,16 @@ public class SettingsWindow extends JFrame {
         loadButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                //if(instancePicker.getItemAt(0) != null) {
                     try {
-                        //var fileIn = new FileInputStream(instancePicker.getItemAt(0));
-                        var fileIn = new FileInputStream(loadNameText.getText() + ".ser");
+                        var fileIn = new FileInputStream("States/" + loadNameText.getText() + ".ser");
                         var objectIn = new ObjectInputStream(fileIn);
-                        target.loadSettings((HP15cState) objectIn.readObject());
+                        target.loadState((HP15cState) objectIn.readObject());
                         fileIn.close();
                         objectIn.close();
                     }
                     catch (Exception exception){
                         exception.printStackTrace();
-                        //System.out.println("error loading state");
                     }
-                //}
             }
         });
         loadPanel.add(loadButton);
@@ -58,7 +54,24 @@ public class SettingsWindow extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 try {
-                    var fileOut = new FileOutputStream(saveNameText.getText() + ".ser");
+                    var fileOut = new FileOutputStream("States/" + saveNameText.getText() + ".ser");
+                    var objectOut = new ObjectOutputStream(fileOut);
+                    objectOut.writeObject(target.getHP15cState());
+                    fileOut.close();
+                    objectOut.close();
+                }
+                catch (Exception exception){
+                    exception.printStackTrace();
+                    System.out.println("error saving state");
+                }
+            }
+        });
+        var saveDefaultButton = new JButton("Save Current State as Default State");
+        saveDefaultButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    var fileOut = new FileOutputStream("States/default.ser");
                     var objectOut = new ObjectOutputStream(fileOut);
                     objectOut.writeObject(target.getHP15cState());
                     fileOut.close();
@@ -71,6 +84,7 @@ public class SettingsWindow extends JFrame {
             }
         });
         savePanel.add(saveButton);
+        savePanel.add(saveDefaultButton);
 
         centerPanel.add(loadPanel);
         centerPanel.add(savePanel);
