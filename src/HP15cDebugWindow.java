@@ -6,7 +6,7 @@ import java.text.DecimalFormat;
 
 public class HP15cDebugWindow extends JFrame {
 
-    private HP15c target;
+    private transient HP15c target;
     private HP15cState state;
     private JTextArea registersText;
     private DecimalFormat fixFormatter;

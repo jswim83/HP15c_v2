@@ -6,7 +6,7 @@ import java.io.*;
 
 public class SettingsWindow extends JFrame {
 
-    private HP15c target;
+    private transient HP15c target;
 
     public SettingsWindow(HP15c target) {
         this.target = target;
