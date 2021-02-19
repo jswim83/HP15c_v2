@@ -63,6 +63,7 @@ public class HP15c extends JFrame implements Serializable {
     };
 
     public static abstract class Input implements Serializable {
+        public final String dummy = "dummy";
         public final String code;
         public final String name;
 
