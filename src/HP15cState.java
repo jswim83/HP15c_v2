@@ -7,7 +7,7 @@ import java.util.Stack;
 public class HP15cState implements Serializable {
 
     protected double[] stack;
-    protected HP15c.Input[] programMemory;
+    protected HP15c.ProgramStep[] programMemory;
     protected double[] registers;
     protected boolean programMode;
     protected int programIndex;
@@ -15,7 +15,7 @@ public class HP15cState implements Serializable {
     protected HP15c.AngleMode angleMode;
     protected int precision;
 
-    public HP15cState(double[] stack, HP15c.Input[] programMemory, double[] registers, boolean programMode,
+    public HP15cState(double[] stack, HP15c.ProgramStep[] programMemory, double[] registers, boolean programMode,
                       int programIndex, HP15c.DisplayMode displayMode, HP15c.AngleMode angleMode, int precision) {
         this.stack = stack;
         this.programMemory = programMemory;
@@ -31,7 +31,7 @@ public class HP15cState implements Serializable {
         this.stack = stack;
     }
 
-    public void setProgramMemory(HP15c.Input[] programMemory) {
+    public void setProgramMemory(HP15c.ProgramStep[] programMemory) {
         this.programMemory = programMemory;
     }
 

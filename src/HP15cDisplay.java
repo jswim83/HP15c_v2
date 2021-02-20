@@ -128,18 +128,18 @@ public class HP15cDisplay extends JPanel {
         }
     }
 
-    public void drawProgram(int programIndex, HP15c.Input input) {
+    public void drawProgram(int programIndex, HP15c.ProgramStep programStep) {
         this.clear();
         var programIndexString = programStepFormatter.format((double) programIndex);
         for (int i = 0; i < 3; i++)
             displays[i].setDigit(new Digit(programIndexString.charAt(i)));
         displays[3].setDigit(Digit.MINUS);
         var displayIndex = 10;
-        if (input != null) {
+        if (programStep != null) {
             char currentChar;
             var digitGroup = false;
-            for (int j = input.code.length() - 1; j > -1; j--) {
-                currentChar = input.code.charAt(j);
+            for (int j = programStep.input.length() - 1; j > -1; j--) {
+                currentChar = programStep.input.charAt(j);
 
                 switch (currentChar){
                     case ',':
@@ -163,19 +163,16 @@ public class HP15cDisplay extends JPanel {
         }
     }
 
-    public void updateCommandDisplay(LinkedList<Character> command) {
+    public void updateCommandDisplay(String commandString) {
         clearCommandPrompts();
-        if (command.isEmpty())
+        if (commandString.equals(""))
             return;
-        var i = 0;
-        var commandChars = new char[command.size()];
-        for (char c : command)
-            commandChars[i++] = c;
-        var commandString = new String(commandChars);
         commandPropts[0].setText(commandString);
-        int letter = Character.getNumericValue(command.peek()) - 10;
+        int letter = Character.getNumericValue(commandString.charAt(0)) - 10;
+        if (letter < 0 || letter > 26)
+            return;
         String[] matchingCommands = commandList[letter];
-        i = 1;
+        var i = 1;
         for (int j = 0; j < commandPropts.length && j < matchingCommands.length; j++) {
             if (matchingCommands[j].equals(commandString))
                 return;
@@ -185,8 +182,8 @@ public class HP15cDisplay extends JPanel {
     }
 
     public void clearCommandPrompts(){
-        for (int k = 0; k < commandPropts.length; k++) {
-            commandPropts[k].setText(null);
+        for (int i = 0; i < commandPropts.length; i++) {
+            commandPropts[i].setText(null);
         }
     }
 

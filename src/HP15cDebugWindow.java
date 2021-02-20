@@ -81,7 +81,7 @@ public class HP15cDebugWindow extends JFrame {
         for (int i = 0; i < state.programMemory.length; i++) {
             if (state.programMemory[i] != null) {
                 memoryBuilder.append(HP15cDisplay.getProgramStepFormatter().format(i) + ": ");
-                memoryBuilder.append(state.programMemory[i].name);
+                memoryBuilder.append(state.programMemory[i].input);
                 if (i != state.programMemory.length - 1)
                     memoryBuilder.append("\n");
             }

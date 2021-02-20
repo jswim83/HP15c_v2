@@ -13,15 +13,15 @@ public class HP15c extends JFrame implements Serializable {
     private final HP15cDisplay display;
     private transient KeyListener mainListener;
     private String xRegisterString = "0";
-    private String waitingInputString = "";
-    private volatile WaitingInput waitingInput;
-    private final LinkedList<Character> commandBuffer;
+    private String commandString = "";
+    private String commandValueString = "";
     private double[] stack;
     private double[][] complexStack;
-    private Input[] programMemory = new Input[448];
+    private ProgramStep[] programMemory = new ProgramStep[448];
     private final Stack<Integer> programStack = new Stack<>();
     private double[] registers = new double[67];
     private static final HashMap<String, Input> operationMap = new HashMap<>(20);
+    private static final HashMap<String, Input> controlOperationMap = new HashMap<>(2);
     private static final HashMap<String, Input> labelMap = new HashMap<>(15);
     private static final HashMap<String, Integer> registerMap = new HashMap<>(21);
     private boolean programMode;
@@ -43,7 +43,7 @@ public class HP15c extends JFrame implements Serializable {
     public static final int TREG = 3;
 
     private enum LastEntry {
-        DIGIT, COMMAND
+        DIGIT, COMMAND, COMMAND_VALUE
     }
 
     public enum DisplayMode implements Serializable {
@@ -62,14 +62,17 @@ public class HP15c extends JFrame implements Serializable {
             "0.E00", "0.0E00", "0.00E00", "0.000E00", "0.0000E00", "0.00000E00", "0.000000E00",
     };
 
-    public static abstract class Input implements Serializable {
-        public final String dummy = "dummy";
-        public final String code;
+    public abstract class Input implements Serializable {
+        public final String key;
         public final String name;
+        public final String code;
+        public final boolean isValued;
 
-        public Input(String code, String name) {
-            this.code = code;
+        public Input(String key, String name, String code) {
+            this.key = key;
             this.name = name;
+            this.code = code;
+            this.isValued = false;
         }
 
         public abstract void input();
@@ -79,26 +82,26 @@ public class HP15c extends JFrame implements Serializable {
             if (!(obj instanceof Input))
                 return false;
             var toCompare = (Input) obj;
-            return this.code.equals(toCompare.code);
+            return this.key.equals(toCompare.key);
         }
     }
 
-    private abstract class WaitingInput extends Input implements Serializable {
-        public final int waitingLength;
+    public abstract class ValuedInput extends Input {
+        public HashMap<String, String> valueMap;
 
-        public WaitingInput(String code, String name, int length) {
-            super(code, name);
-            this.waitingLength = length;
+        public ValuedInput(String key, String name, String value, String code) {
+            super(key, name, code);
         }
+
+        public abstract void input(String value);
     }
 
-    private abstract class ValuedInput extends Input implements Serializable {
-        public String address;
-
-
-        public ValuedInput(String code, String address, String name) {
-            super(code, name);
-            this.address = address;
+    public static class ProgramStep implements Serializable {
+        public final String input;
+        public final boolean isValued;
+        public ProgramStep(String input, boolean isValued) {
+            this.input = input;
+            this.isValued = isValued;
         }
     }
 
@@ -106,11 +109,10 @@ public class HP15c extends JFrame implements Serializable {
         setupOperations();
         this.display = new HP15cDisplay();
         this.setUpMainListener();
-        this.commandBuffer = new LinkedList<>();
         this.stack = new double[4];
         this.precision = 4;
         this.fixFormatter = new DecimalFormat(fixPatterns[precision]);
-        this.scientificFormatter = new DecimalFormat(scientificPatterns[precision > 6 ? 6 : precision]);
+        this.scientificFormatter = new DecimalFormat(scientificPatterns[Math.min(precision, 6)]);
         this.displayFormatter = this.fixFormatter;
         this.setTitle("HP 15c");
         this.setDefaultCloseOperation(EXIT_ON_CLOSE);
@@ -166,88 +168,72 @@ public class HP15c extends JFrame implements Serializable {
         this.mainListener = new KeyListener() {
             @Override
             public void keyReleased(KeyEvent e) {
-                var inputCode = e.getKeyCode();
                 var inputChar = e.getKeyChar();
-                var inputString = String.valueOf(e.getKeyCode());
+                //awaiting value input
                 if (awaitingInput) {
-                    waitingInputString = waitingInputString + inputChar;
-                    if (waitingInput.equals(operationMap.get("sto")) || waitingInput.equals(operationMap.get("rcl"))) {
-                        if (registerMap.containsKey(waitingInputString)) {
-                            waitingInput.input();
-                            waitingInput = null;
-                            waitingInputString = "";
-                        }
-                    }
-                    else if (waitingInputString.length() == waitingInput.waitingLength) {
-                        waitingInput.input();
-                        waitingInput = null;
-                        waitingInputString = "";
-                        return;
-                    }
-                }
-                //if entering a single character command
-                if (operationMap.containsKey(inputString)) {
-                    if (programMode) {
-                        switch (inputString) {
-                            case "8":       //backspace
-                                operationMap.get(inputString).input();
-                                break;
-                            case "32":      //space
-                                shiftProgramMemoryForward();
-                                operationMap.get(inputString).input();
-                                break;
-                            default:
-                                shiftProgramMemoryForward();
-                                programMemory[++programIndex] = operationMap.get(inputString);
-                                display.drawProgram(programIndex, operationMap.get(inputString));
-                                break;
-                        }
-                    }
-                    else {
-                        operationMap.get(inputString).input();
-                        commandBuffer.clear();
-                    }
-                    return;
-                }
-                //if entering a multi-character command
-                if (Character.isAlphabetic(inputChar)) {
-                    lastEntry = LastEntry.COMMAND;
-                    commandBuffer.add(inputChar);
-                    display.updateCommandDisplay(commandBuffer);
-                    var commandString = charLLtoString(commandBuffer);
-                    if (operationMap.containsKey(commandString)) {
+                    lastEntry = LastEntry.COMMAND_VALUE;
+                    commandValueString = commandString + inputChar;
+                    display.updateCommandDisplay(commandString + " " + commandValueString);
+                    ValuedInput currentInput = (ValuedInput)operationMap.get(commandString);
+                    //check if a valid value is entered
+                    if (currentInput.valueMap.containsKey(commandValueString)) {
                         if (programMode) {
-                            switch (commandString) {
-                                case "pr":
-                                    operationMap.get(commandString).input();
-                                    break;
-                                case "lbl":
-                                case "sto":
-                                case "rcl":
-                                case "fix":
-                                case "sci":
-                                case "eng":
-                                case "gto":
-                                case "gsb":
-                                    shiftProgramMemoryForward();
-                                    operationMap.get(commandString).input();
-                                    break;
-                                default:
-                                    shiftProgramMemoryForward();
-                                    programMemory[++programIndex] = operationMap.get(commandString);
-                                    display.drawProgram(programIndex, operationMap.get(commandString));
-                                    break;
-                            }
+                            //shiftProgramMemoryForward();
+                            ProgramStep programStep = new ProgramStep(currentInput.key + " " + commandValueString, true);
+                            programMemory[++programIndex] = programStep;
+                            display.drawProgram(programIndex, programStep);
                         }
-                        else
-                            operationMap.get(commandString).input();
-                        if (!awaitingInput) {
-                            commandBuffer.clear();
-                            display.updateCommandDisplay(commandBuffer);
+                        else {
+                            currentInput.input(commandValueString);
                         }
+                        //reset entry variables, and update command display
+                        awaitingInput = false;
+                        commandString = "";
+                        commandValueString = "";
+                        display.updateCommandDisplay(commandString);
                         return;
                     }
-                    lastEntry = LastEntry.COMMAND;
+                    //command value is over 3 characters, must be invalid, clear
+                    else {
+                        if (commandValueString.length() > 3) {
+                            awaitingInput = false;
+                            commandString = "";
+                            commandValueString = "";
+                            display.updateCommandDisplay(commandString);
+                            return;
+                        }
+                    }
+                }
+                //not awaiting input, append new character to commandString
+                lastEntry = Character.isAlphabetic(inputChar) ? LastEntry.COMMAND : lastEntry;
+                commandString = commandString + inputChar;
+                display.updateCommandDisplay(commandString);
+                //the current command is valid
+                if (operationMap.containsKey(commandString)) {
+                    Input currentInput = operationMap.get(commandString);
+                    //current input is valued
+                    if (currentInput.isValued)
+                        awaitingInput = true;
+                    //current input is non-valued
+                    else {
+                        //store command in program memory
+                        if (programMode) {
+                            //shiftProgramMemoryForward();
+                            ProgramStep programStep = new ProgramStep(currentInput.key, false);
+                            programMemory[++programIndex] = programStep;
+                            display.drawProgram(programIndex, programStep);
+                        }
+                        //not program mode, enter command
+                        else
+                            currentInput.input();
+                        commandString = "";
+                        display.updateCommandDisplay(commandString);
+                    }
+                }
+                if (controlOperationMap.containsKey(String.valueOf(inputChar))) {
+                    controlOperationMap.get(String.valueOf(inputChar)).input();
+                    commandString = "";
+                    display.updateCommandDisplay(commandString);
                 }
             }
 
@@ -261,10 +247,6 @@ public class HP15c extends JFrame implements Serializable {
 
             }
         };
-    }
-
-    private String charLLtoString(LinkedList<Character> characterList) {
-        return characterList.stream().map(String::valueOf).collect(Collectors.joining());
     }
 
     private String formatDisplay() {
@@ -288,7 +270,7 @@ public class HP15c extends JFrame implements Serializable {
             case ENG:
                 return scientificFormatter.format(xReg);//fix this
         }
-        return null;
+        return "";
     }
 
     private void printStack() {
@@ -328,7 +310,11 @@ public class HP15c extends JFrame implements Serializable {
         if (labelIndex > -1) {
             programIndex = labelIndex;
             while (programMemory[programIndex] != null && programExecution) {
-                programMemory[programIndex++].input();
+                ProgramStep currentStep = programMemory[programIndex++];
+                if (currentStep.isValued) {
+                    String[] input = currentStep.input.split(" ");
+                    ((ValuedInput)operationMap.get(input[0])).input(input[1]);
+                }
             }
             var disp = displayFormatter.format(stack[XREG]);
             display.drawBuffer(disp);
@@ -353,14 +339,14 @@ public class HP15c extends JFrame implements Serializable {
         var index = programIndex + 1;
         Input currentInput;
         if (programMemory[index] != null)
-            currentInput = programMemory[index];
+            ;//currentInput = programMemory[index];
         else
             return;
         Input tempInput;
         while (programMemory[index] != null && index < programMemory.length - 1) {
-            tempInput = programMemory[index + 1];
-            programMemory[index + 1] = currentInput;
-            currentInput = tempInput;
+            //tempInput = programMemory[index + 1];
+            //programMemory[index + 1] = currentInput;
+            //currentInput = tempInput;
             index++;
         }
     }
@@ -397,8 +383,8 @@ public class HP15c extends JFrame implements Serializable {
         stack[XREG] = guess - (f / fPrime);
         if (stack[XREG] == guess) {
             programExecution = false;
-            commandBuffer.clear();
-            display.updateCommandDisplay(commandBuffer);
+            commandString = "";
+            display.updateCommandDisplay(commandString);
             return;
         }
         solve(label);
@@ -409,130 +395,79 @@ public class HP15c extends JFrame implements Serializable {
     }
 
     private void setupOperations() {
-        operationMap.put(String.valueOf(KeyEvent.VK_0), new Input("00", "0") {
+        operationMap.put("0", new Input("0", "0", "01") {
             @Override
             public void input() {
-                if (!programMode)
-                    inputDigit("0");
-                else {
-                    programMemory[++programIndex] = this;
-                    display.drawProgram(programIndex, this);
-                }
+                inputDigit("0");
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_1), new Input("01", "1") {
+        operationMap.put("1", new Input("1", "1", "01") {
             @Override
             public void input() {
-                if (!programMode)
-                    inputDigit("1");
-                else {
-                    programMemory[++programIndex] = this;
-                    display.drawProgram(programIndex, this);
-                }
+                inputDigit("1");
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_2), new Input("02", "2") {
+        operationMap.put("2", new Input("2", "2", "02") {
             @Override
             public void input() {
-                if (!programMode)
-                    inputDigit("2");
-                else {
-                    programMemory[++programIndex] = this;
-                    display.drawProgram(programIndex, this);
-                }
+                inputDigit("2");
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_3), new Input("03", "3") {
+        operationMap.put("3", new Input("3", "3", "03") {
             @Override
             public void input() {
-                if (!programMode)
-                    inputDigit("3");
-                else {
-                    programMemory[++programIndex] = this;
-                    display.drawProgram(programIndex, this);
-                }
+                inputDigit("3");
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_4), new Input("04", "4") {
+        operationMap.put("4", new Input("4", "4", "04") {
             @Override
             public void input() {
-                if (!programMode)
-                    inputDigit("4");
-                else {
-                    programMemory[++programIndex] = this;
-                    display.drawProgram(programIndex, this);
-                }
+                inputDigit("4");
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_5), new Input("05", "5") {
+        operationMap.put("5", new Input("5", "5", "05") {
             @Override
             public void input() {
-                if (!programMode)
-                    inputDigit("5");
-                else {
-                    programMemory[++programIndex] = this;
-                    display.drawProgram(programIndex, this);
-                }
+                inputDigit("5");
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_6), new Input("06", "6") {
+        operationMap.put("6", new Input("6", "6", "06") {
             @Override
             public void input() {
-                if (!programMode)
-                    inputDigit("6");
-                else {
-                    programMemory[++programIndex] = this;
-                    display.drawProgram(programIndex, this);
-                }
+                inputDigit("6");
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_7), new Input("07", "7") {
+        operationMap.put("7", new Input("7", "7", "07") {
             @Override
             public void input() {
-                if (!programMode)
-                    inputDigit("7");
-                else {
-                    programMemory[++programIndex] = this;
-                    display.drawProgram(programIndex, this);
-                }
+                inputDigit("7");
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_8), new Input("08", "8") {
+        operationMap.put("8", new Input("8", "8", "08") {
             @Override
             public void input() {
-                if (!programMode)
-                    inputDigit("8");
-                else {
-                    programMemory[++programIndex] = this;
-                    display.drawProgram(programIndex, this);
-                }
+                inputDigit("8");
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_9), new Input("09", "9") {
+        operationMap.put("9", new Input("9", "9", "09") {
             @Override
             public void input() {
-                if (!programMode)
-                    inputDigit("9");
-                else {
-                    programMemory[++programIndex] = this;
-                    display.drawProgram(programIndex, this);
-                }
+                inputDigit("9");
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_ENTER), new Input("16", "ENTER") {
+        operationMap.put("\n", new Input("\n", "ENTER", "36") {
             @Override
             public void input() {
-                lastEntry = LastEntry.COMMAND;
                 liftStack();
                 xRegisterString = "";
                 if (!programExecution)
@@ -540,85 +475,14 @@ public class HP15c extends JFrame implements Serializable {
             }
         });
 
-        operationMap.put(String.valueOf(KeyEvent.VK_BACK_SPACE), new Input("35", "BACKSPACE") {
-            @Override
-            public void input() {
-                if (!programMode) {
-                    if (lastEntry == LastEntry.DIGIT) {
-                        switch (xRegisterString.length()) {
-                            case 0:
-                                break;
-                            case 1:
-                                xRegisterString = "";
-                                stack[XREG] = 0.0;
-                                break;
-                            case 2:
-                                if (xRegisterString.charAt(0) == '-') {
-                                    xRegisterString = "";
-                                    stack[XREG] = 0.0;
-                                }
-                                else {
-                                    xRegisterString = xRegisterString.substring(0, 1);
-                                    stack[XREG] = Double.parseDouble(xRegisterString);
-                                }
-                                break;
-                            default:
-                                xRegisterString = xRegisterString.substring(0, xRegisterString.length() - 1);
-                                stack[XREG] = Double.parseDouble(xRegisterString);
-                                break;
-                        }
-                        display.drawBuffer(xRegisterString);
-                    }
-                    else {
-                        if (commandBuffer.isEmpty()) {
-                            stack[XREG] = 0.0;
-                            display.drawBuffer(formatDisplay());
-                        }
-                        else
-                            commandBuffer.clear();
-                        display.updateCommandDisplay(commandBuffer);
-                    }
-                }
-                else {
-                    if (commandBuffer.isEmpty()) {
-                        if (programIndex > 0) {
-                            shiftProgramMemoryBackward();
-                            display.drawProgram(--programIndex, programMemory[programIndex]);
-                        }
-                    }
-                    else {
-                        commandBuffer.clear();
-                        display.updateCommandDisplay(commandBuffer);
-                    }
-                }
-            }
-        });
-
-        operationMap.put(String.valueOf(KeyEvent.VK_SPACE), new Input("00", "COMMAND ENTER") {
-            @Override
-            public void input() {
-                if (!commandBuffer.isEmpty()) {
-                    if (programMode) {
-                        var operation = operationMap.get(display.getCommand());
-                        programMemory[++programIndex] = operation;
-                        display.drawProgram(programIndex, operation);
-                    }
-                    else
-                        operationMap.get(display.getCommand()).input();
-                    commandBuffer.clear();
-                    display.updateCommandDisplay(commandBuffer);
-                }
-            }
-        });
-
-        operationMap.put(String.valueOf(KeyEvent.VK_PERIOD), new Input("48", "DECIMAL") {
+        operationMap.put(".", new Input(".", "DECIMAL", "48") {
             @Override
             public void input() {
                 lastEntry = LastEntry.DIGIT;
                 if (xRegisterString.contains("."))
                     return;
-                /*if ((xRegisterString.contains(".") ? xRegisterString.length() : xRegisterString.length() - 1) > 9)
-                    return;*/
+                if ((xRegisterString.contains(".") ? xRegisterString.length() : xRegisterString.length() - 1) > 9)
+                    return;
                 if (stackLift) {
                     liftStack();
                     xRegisterString = ".";
@@ -632,7 +496,7 @@ public class HP15c extends JFrame implements Serializable {
                     display.drawBuffer(xRegisterString);
             }
         });
-
+/*
         operationMap.put("settings", new Input("", "SETTINGS") {
             @Override
             public void input() {
@@ -751,8 +615,8 @@ public class HP15c extends JFrame implements Serializable {
                     }
                     display.setCommandPropt(null);
                     awaitingInput = false;
-                    commandBuffer.clear();
-                    display.updateCommandDisplay(commandBuffer);
+                    commandString.clear();
+                    display.updateCommandDisplay(commandString);
                 }
                 if (address.length() > 3 || address.contains("\b")) {
                     if (programMode)
@@ -763,8 +627,8 @@ public class HP15c extends JFrame implements Serializable {
                     }
                     display.setCommandPropt(null);
                     awaitingInput = false;
-                    commandBuffer.clear();
-                    display.updateCommandDisplay(commandBuffer);
+                    commandString.clear();
+                    display.updateCommandDisplay(commandString);
                 }
             }
         });
@@ -808,8 +672,8 @@ public class HP15c extends JFrame implements Serializable {
                     }
                     display.setCommandPropt(null);
                     awaitingInput = false;
-                    commandBuffer.clear();
-                    display.updateCommandDisplay(commandBuffer);
+                    commandString.clear();
+                    display.updateCommandDisplay(commandString);
 
                 }
                 if (address.length() > 3 || address.contains("\b")) {
@@ -821,8 +685,8 @@ public class HP15c extends JFrame implements Serializable {
                     }
                     display.setCommandPropt(null);
                     awaitingInput = false;
-                    commandBuffer.clear();
-                    display.updateCommandDisplay(commandBuffer);
+                    commandString.clear();
+                    display.updateCommandDisplay(commandString);
                 }
             }
         });
@@ -855,8 +719,8 @@ public class HP15c extends JFrame implements Serializable {
                     display.drawBuffer(formatDisplay());
             }
         });
-
-        operationMap.put("plus", new Input("40", "PLUS") {
+*/
+        operationMap.put("plus", new Input("plus", "PLUS", "40") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] + stack[XREG];
@@ -864,14 +728,12 @@ public class HP15c extends JFrame implements Serializable {
                 stack[ZREG] = stack[TREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("sub", new Input("30", "SUB") {
+        operationMap.put("sub", new Input("sub", "SUB", "30") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] - stack[XREG];
@@ -879,14 +741,12 @@ public class HP15c extends JFrame implements Serializable {
                 stack[ZREG] = stack[TREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("mult", new Input("20", "MULT") {
+        operationMap.put("mult", new Input("mult", "MULT", "20") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] * stack[XREG];
@@ -894,14 +754,12 @@ public class HP15c extends JFrame implements Serializable {
                 stack[ZREG] = stack[TREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("div", new Input("10", "DIV") {
+        operationMap.put("div", new Input("div", "DIV", "10") {
             @Override
             public void input() {
                 stack[XREG] = stack[YREG] / stack[XREG];
@@ -909,13 +767,12 @@ public class HP15c extends JFrame implements Serializable {
                 stack[ZREG] = stack[TREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
+
             }
         });
-
+/*
         operationMap.put("sqt", new Input("11", "SQT") {
             @Override
             public void input() {
@@ -1400,13 +1257,13 @@ public class HP15c extends JFrame implements Serializable {
                 }
                 display.setCommandPropt(null);
                 awaitingInput = false;
-                commandBuffer.clear();
-                display.updateCommandDisplay(commandBuffer);
+                commandString.clear();
+                display.updateCommandDisplay(commandString);
             }
         });
-
+*/
         //program operations
-        operationMap.put("pr", new Input("50", "PR") {
+        operationMap.put("pr", new Input("pr", "PR", "50") {
             @Override
             public void input() {
                 programMode = !programMode;
@@ -1417,7 +1274,7 @@ public class HP15c extends JFrame implements Serializable {
                 display.drawProgramAnnunciator(programMode);
             }
         });
-
+/*
         operationMap.put("lbl", new WaitingInput("31", "LBL", 1) {
             @Override
             public void input() {
@@ -1435,8 +1292,8 @@ public class HP15c extends JFrame implements Serializable {
                     display.drawProgram(programIndex, labelMap.get(address));
                 }
                 awaitingInput = false;
-                commandBuffer.clear();
-                display.updateCommandDisplay(commandBuffer);
+                commandString.clear();
+                display.updateCommandDisplay(commandString);
             }
         });
 
@@ -1475,8 +1332,8 @@ public class HP15c extends JFrame implements Serializable {
                                 removeKeyListener(getKeyListeners()[0]);
                                 addKeyListener(mainListener);
                                 awaitingInput = false;
-                                commandBuffer.clear();
-                                display.updateCommandDisplay(commandBuffer);
+                                commandString.clear();
+                                display.updateCommandDisplay(commandString);
                                 return;
                             }
                             display.setCommandPropt("gto nnn");
@@ -1492,8 +1349,8 @@ public class HP15c extends JFrame implements Serializable {
                                 removeKeyListener(getKeyListeners()[0]);
                                 addKeyListener(mainListener);
                                 awaitingInput = false;
-                                commandBuffer.clear();
-                                display.updateCommandDisplay(commandBuffer);
+                                commandString.clear();
+                                display.updateCommandDisplay(commandString);
                             }
                         }
                         else {
@@ -1526,8 +1383,8 @@ public class HP15c extends JFrame implements Serializable {
                             removeKeyListener(getKeyListeners()[0]);
                             addKeyListener(mainListener);
                             awaitingInput = false;
-                            commandBuffer.clear();
-                            display.updateCommandDisplay(commandBuffer);
+                            commandString.clear();
+                            display.updateCommandDisplay(commandString);
                         }
                     }
 
@@ -1555,7 +1412,7 @@ public class HP15c extends JFrame implements Serializable {
                     public void keyReleased(KeyEvent e) {
                         var inputString = String.valueOf(e.getKeyCode());
                         if (programMode) {
-                            programMemory[++programIndex] = new ValuedInput("32", inputString, "GSB " + labelMap.get(inputString).name) {
+                            programMemory[++programIndex] = new ValuedInput("32", inputString, "GSB " + labelMap.get(inputString).key) {
                                 @Override
                                 public void input() {
                                     stackLift = true;
@@ -1588,8 +1445,8 @@ public class HP15c extends JFrame implements Serializable {
                         removeKeyListener(getKeyListeners()[0]);
                         addKeyListener(mainListener);
                         awaitingInput = false;
-                        commandBuffer.clear();
-                        display.updateCommandDisplay(commandBuffer);
+                        commandString.clear();
+                        display.updateCommandDisplay(commandString);
                     }
 
                     @Override
@@ -1605,7 +1462,111 @@ public class HP15c extends JFrame implements Serializable {
             }
         });
 
+        operationMap.put("fa", new Input("11", "A") {
+            @Override
+            public void input() {
+                programExecution = true;
+                executeProgram(labelMap.get("a"));
+            }
+        });
+        operationMap.put("fb", new Input("12", "B") {
+            @Override
+            public void input() {
+                programExecution = true;
+                executeProgram(labelMap.get("b"));
+            }
+        });
+        operationMap.put("fc", new Input("13", "C") {
+            @Override
+            public void input() {
+                programExecution = true;
+                executeProgram(labelMap.get("c"));
+            }
+        });
+        operationMap.put("fd", new Input("14", "D") {
+            @Override
+            public void input() {
+                programExecution = true;
+                executeProgram(labelMap.get("d"));
+            }
+        });
+        operationMap.put("fe", new Input("15", "E") {
+            @Override
+            public void input() {
+                programExecution = true;
+                executeProgram(labelMap.get("e"));
+            }
+        });*/
 
+        controlOperationMap.put("\b", new Input("\b", "BACKSPACE", "35") {
+            @Override
+            public void input() {
+                if (!programMode) {
+                    if (lastEntry == LastEntry.DIGIT) {
+                        switch (xRegisterString.length()) {
+                            case 0:
+                                break;
+                            case 1:
+                                xRegisterString = "";
+                                stack[XREG] = 0.0;
+                                break;
+                            case 2:
+                                if (xRegisterString.charAt(0) == '-') {
+                                    xRegisterString = "";
+                                    stack[XREG] = 0.0;
+                                }
+                                else {
+                                    xRegisterString = xRegisterString.substring(0, 1);
+                                    stack[XREG] = Double.parseDouble(xRegisterString);
+                                }
+                                break;
+                            default:
+                                xRegisterString = xRegisterString.substring(0, xRegisterString.length() - 1);
+                                stack[XREG] = Double.parseDouble(xRegisterString);
+                                break;
+                        }
+                        display.drawBuffer(xRegisterString);
+                    }
+                    else {
+                        if (commandString.equals("\b")) {
+                            stack[XREG] = 0.0;
+                            display.drawBuffer(formatDisplay());
+                        }
+                    }
+                }
+                else {
+                    if (commandString.isEmpty()) {
+                        if (programIndex > 0) {
+                            shiftProgramMemoryBackward();
+                            display.drawProgram(--programIndex, programMemory[programIndex]);
+                        }
+                    }
+                    else {
+                        commandString = "";
+                        display.updateCommandDisplay(commandString);
+                    }
+                }
+            }
+        });
+
+        controlOperationMap.put(" ", new Input(" ", "COMMAND ENTER", "00") {
+            @Override
+            public void input() {
+                if (!commandString.isEmpty()) {
+                    if (programMode) {
+                        var operation = operationMap.get(display.getCommand());
+                        ProgramStep programStep = new ProgramStep(operation.key, false);
+                        programMemory[++programIndex] = programStep;
+                        display.drawProgram(programIndex, programStep);
+                    }
+                    else
+                        operationMap.get(display.getCommand()).input();
+                    commandString = "";
+                    display.updateCommandDisplay(commandString);
+                }
+            }
+        });
+/*
         labelMap.put("a", new Input("42,21,11", "LBL A") {
             @Override
             public void input() {
@@ -1696,42 +1657,7 @@ public class HP15c extends JFrame implements Serializable {
 
             }
         });
-
-        operationMap.put("fa", new Input("11", "A") {
-            @Override
-            public void input() {
-                programExecution = true;
-                executeProgram(labelMap.get("a"));
-            }
-        });
-        operationMap.put("fb", new Input("12", "B") {
-            @Override
-            public void input() {
-                programExecution = true;
-                executeProgram(labelMap.get("b"));
-            }
-        });
-        operationMap.put("fc", new Input("13", "C") {
-            @Override
-            public void input() {
-                programExecution = true;
-                executeProgram(labelMap.get("c"));
-            }
-        });
-        operationMap.put("fd", new Input("14", "D") {
-            @Override
-            public void input() {
-                programExecution = true;
-                executeProgram(labelMap.get("d"));
-            }
-        });
-        operationMap.put("fe", new Input("15", "E") {
-            @Override
-            public void input() {
-                programExecution = true;
-                executeProgram(labelMap.get("e"));
-            }
-        });
+        */
 
         registerMap.put("0", 0);
         registerMap.put("1", 1);
