@@ -5,6 +5,7 @@ import java.io.*;
 import java.text.DecimalFormat;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Stack;
 import java.util.stream.Collectors;
 
@@ -35,7 +36,7 @@ public class HP15c extends JFrame implements Serializable {
     private final DecimalFormat displayFormatter;
     private final DecimalFormat fixFormatter;
     private final DecimalFormat scientificFormatter;
-    private boolean awaitingInput;
+    private volatile boolean awaitingInput;
 
     public static final int XREG = 0;
     public static final int YREG = 1;
@@ -46,36 +47,40 @@ public class HP15c extends JFrame implements Serializable {
         DIGIT, COMMAND, COMMAND_VALUE
     }
 
-    public enum DisplayMode implements Serializable {
+    protected enum DisplayMode implements Serializable {
         FIX, SCI, ENG
     }
 
-    public enum AngleMode implements Serializable {
+    protected enum AngleMode implements Serializable {
         DEG, RAD, GRAD
     }
 
-    public static final String[] fixPatterns = {
+    protected static final String[] fixPatterns = {
             "#,##0.", "#,##0.0", "#,##0.00", "#,##0.000", "#,##0.0000",
             "#,##0.00000", "#,##0.000000", "#,##0.0000000", "#,##0.00000000", "#,##0.000000000"
     };
-    public static final String[] scientificPatterns = {
+    protected static final String[] scientificPatterns = {
             "0.E00", "0.0E00", "0.00E00", "0.000E00", "0.0000E00", "0.00000E00", "0.000000E00",
     };
 
-    public abstract class Input implements Serializable {
+    protected static final List<String> precisionValues = List.of("0", "1", "2", "3", "4", "5", "6", "7", "8", "9");
+
+    public abstract static class Input implements Serializable {
         public final String key;
         public final String name;
         public final String code;
         public final boolean isValued;
+        public final List<String> valueMap;
 
-        public Input(String key, String name, String code) {
+        public Input(String key, String name, String code, boolean isValued, List<String> valueMap) {
             this.key = key;
             this.name = name;
             this.code = code;
-            this.isValued = false;
+            this.isValued = isValued;
+            this.valueMap = isValued ? valueMap : null;
         }
 
-        public abstract void input();
+        public abstract void input(String value);
 
         @Override
         public boolean equals(Object obj) {
@@ -86,19 +91,10 @@ public class HP15c extends JFrame implements Serializable {
         }
     }
 
-    public abstract class ValuedInput extends Input {
-        public HashMap<String, String> valueMap;
-
-        public ValuedInput(String key, String name, String value, String code) {
-            super(key, name, code);
-        }
-
-        public abstract void input(String value);
-    }
-
     public static class ProgramStep implements Serializable {
         public final String input;
         public final boolean isValued;
+
         public ProgramStep(String input, boolean isValued) {
             this.input = input;
             this.isValued = isValued;
@@ -172,11 +168,11 @@ public class HP15c extends JFrame implements Serializable {
                 //awaiting value input
                 if (awaitingInput) {
                     lastEntry = LastEntry.COMMAND_VALUE;
-                    commandValueString = commandString + inputChar;
+                    commandValueString += inputChar;
                     display.updateCommandDisplay(commandString + " " + commandValueString);
-                    ValuedInput currentInput = (ValuedInput)operationMap.get(commandString);
+                    Input currentInput = operationMap.get(commandString);
                     //check if a valid value is entered
-                    if (currentInput.valueMap.containsKey(commandValueString)) {
+                    if (currentInput.valueMap.contains(commandValueString)) {
                         if (programMode) {
                             //shiftProgramMemoryForward();
                             ProgramStep programStep = new ProgramStep(currentInput.key + " " + commandValueString, true);
@@ -206,7 +202,7 @@ public class HP15c extends JFrame implements Serializable {
                 }
                 //not awaiting input, append new character to commandString
                 lastEntry = Character.isAlphabetic(inputChar) ? LastEntry.COMMAND : lastEntry;
-                commandString = commandString + inputChar;
+                commandString += inputChar;
                 display.updateCommandDisplay(commandString);
                 //the current command is valid
                 if (operationMap.containsKey(commandString)) {
@@ -214,7 +210,7 @@ public class HP15c extends JFrame implements Serializable {
                     //current input is valued
                     if (currentInput.isValued)
                         awaitingInput = true;
-                    //current input is non-valued
+                        //current input is non-valued
                     else {
                         //store command in program memory
                         if (programMode) {
@@ -225,15 +221,15 @@ public class HP15c extends JFrame implements Serializable {
                         }
                         //not program mode, enter command
                         else
-                            currentInput.input();
+                            currentInput.input(null);
                         commandString = "";
                         display.updateCommandDisplay(commandString);
                     }
+                    return;
                 }
                 if (controlOperationMap.containsKey(String.valueOf(inputChar))) {
-                    controlOperationMap.get(String.valueOf(inputChar)).input();
-                    commandString = "";
-                    display.updateCommandDisplay(commandString);
+                    display.updateCommandDisplay(commandString.substring(0, commandString.length() - 1));
+                    controlOperationMap.get(String.valueOf(inputChar)).input(null);
                 }
             }
 
@@ -273,14 +269,6 @@ public class HP15c extends JFrame implements Serializable {
         return "";
     }
 
-    private void printStack() {
-        //System.out.println("T: " + stack[TREG]);
-        //System.out.println("Z: " + stack[ZREG]);
-        //System.out.println("Y: " + stack[YREG]);
-        //System.out.println("X: " + stack[XREG]);
-        //System.out.println();
-    }
-
     private void liftStack() {
         stack[TREG] = stack[ZREG];
         stack[ZREG] = stack[YREG];
@@ -313,8 +301,10 @@ public class HP15c extends JFrame implements Serializable {
                 ProgramStep currentStep = programMemory[programIndex++];
                 if (currentStep.isValued) {
                     String[] input = currentStep.input.split(" ");
-                    ((ValuedInput)operationMap.get(input[0])).input(input[1]);
+                    operationMap.get(input[0]).input(input[1]);
                 }
+                else
+                    operationMap.get(currentStep).input(null);
             }
             var disp = displayFormatter.format(stack[XREG]);
             display.drawBuffer(disp);
@@ -395,79 +385,79 @@ public class HP15c extends JFrame implements Serializable {
     }
 
     private void setupOperations() {
-        operationMap.put("0", new Input("0", "0", "01") {
+        operationMap.put("0", new Input("0", "0", "01", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 inputDigit("0");
             }
         });
 
-        operationMap.put("1", new Input("1", "1", "01") {
+        operationMap.put("1", new Input("1", "1", "01", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 inputDigit("1");
             }
         });
 
-        operationMap.put("2", new Input("2", "2", "02") {
+        operationMap.put("2", new Input("2", "2", "02", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 inputDigit("2");
             }
         });
 
-        operationMap.put("3", new Input("3", "3", "03") {
+        operationMap.put("3", new Input("3", "3", "03", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 inputDigit("3");
             }
         });
 
-        operationMap.put("4", new Input("4", "4", "04") {
+        operationMap.put("4", new Input("4", "4", "04", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 inputDigit("4");
             }
         });
 
-        operationMap.put("5", new Input("5", "5", "05") {
+        operationMap.put("5", new Input("5", "5", "05", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 inputDigit("5");
             }
         });
 
-        operationMap.put("6", new Input("6", "6", "06") {
+        operationMap.put("6", new Input("6", "6", "06", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 inputDigit("6");
             }
         });
 
-        operationMap.put("7", new Input("7", "7", "07") {
+        operationMap.put("7", new Input("7", "7", "07", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 inputDigit("7");
             }
         });
 
-        operationMap.put("8", new Input("8", "8", "08") {
+        operationMap.put("8", new Input("8", "8", "08", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 inputDigit("8");
             }
         });
 
-        operationMap.put("9", new Input("9", "9", "09") {
+        operationMap.put("9", new Input("9", "9", "09", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 inputDigit("9");
             }
         });
 
-        operationMap.put("\n", new Input("\n", "ENTER", "36") {
+        operationMap.put("\n", new Input("\n", "ENTER", "36", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 liftStack();
                 xRegisterString = "";
                 if (!programExecution)
@@ -475,9 +465,9 @@ public class HP15c extends JFrame implements Serializable {
             }
         });
 
-        operationMap.put(".", new Input(".", "DECIMAL", "48") {
+        operationMap.put(".", new Input(".", "DECIMAL", "48", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 lastEntry = LastEntry.DIGIT;
                 if (xRegisterString.contains("."))
                     return;
@@ -720,9 +710,9 @@ public class HP15c extends JFrame implements Serializable {
             }
         });
 */
-        operationMap.put("plus", new Input("plus", "PLUS", "40") {
+        operationMap.put("plus", new Input("plus", "PLUS", "40", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = stack[YREG] + stack[XREG];
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
@@ -733,9 +723,9 @@ public class HP15c extends JFrame implements Serializable {
             }
         });
 
-        operationMap.put("sub", new Input("sub", "SUB", "30") {
+        operationMap.put("sub", new Input("sub", "SUB", "30", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = stack[YREG] - stack[XREG];
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
@@ -746,9 +736,9 @@ public class HP15c extends JFrame implements Serializable {
             }
         });
 
-        operationMap.put("mult", new Input("mult", "MULT", "20") {
+        operationMap.put("mult", new Input("mult", "MULT", "20", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = stack[YREG] * stack[XREG];
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
@@ -759,9 +749,9 @@ public class HP15c extends JFrame implements Serializable {
             }
         });
 
-        operationMap.put("div", new Input("div", "DIV", "10") {
+        operationMap.put("div", new Input("div", "DIV", "10", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = stack[YREG] / stack[XREG];
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
@@ -772,156 +762,136 @@ public class HP15c extends JFrame implements Serializable {
 
             }
         });
-/*
-        operationMap.put("sqt", new Input("11", "SQT") {
+
+        operationMap.put("sqt", new Input("sqt", "SQT", "11", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = Math.sqrt(stack[XREG]);
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("exp", new Input("12", "EXP") {
+        operationMap.put("exp", new Input("exp", "EXP", "12", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = Math.exp(stack[XREG]);
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("alog", new Input("13", "ALOG") {
+        operationMap.put("alog", new Input("alog", "ALOG", "13", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = Math.pow(10.0, stack[XREG]);
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("yx", new Input("14", "YX") {
+        operationMap.put("yx", new Input("yx", "YX", "14", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = Math.pow(stack[YREG], stack[XREG]);
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("inv", new Input("15", "INV") {
+        operationMap.put("inv", new Input("inv", "INV", "15", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = 1.0 / stack[XREG];
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("sqr", new Input("11", "SQR") {
+        operationMap.put("sqr", new Input("sqr", "SQR", "43 11", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = stack[XREG] * stack[XREG];
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("ln", new Input("12", "LN") {
+        operationMap.put("ln", new Input("ln", "LN", "43 12", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = Math.log(stack[XREG]);
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("log", new Input("13", "LOG") {
+        operationMap.put("log", new Input("log", "LOG", "43 13", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = Math.log10(stack[XREG]);
                 stack[YREG] = stack[ZREG];
                 stack[ZREG] = stack[TREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("per", new Input("14", "PER") {
+        operationMap.put("per", new Input("per", "PER", "43 14", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = stack[YREG] * .01 * stack[XREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("pch", new Input("15", "PCH") {
+        operationMap.put("pch", new Input("pch", "PCH", "43 15", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = (stack[XREG] - stack[YREG]) * 100 / stack[YREG];
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("sin", new Input("23", "SIN") {
+        operationMap.put("sin", new Input("sin", "SIN", "23", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 switch (angleMode) {
                     case DEG:
                         stack[XREG] = Math.sin(stack[XREG] * Math.PI / 180);
@@ -935,16 +905,14 @@ public class HP15c extends JFrame implements Serializable {
                 }
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("cos", new Input("24", "COS") {
+        operationMap.put("cos", new Input("cos", "COS", "24", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 switch (angleMode) {
                     case DEG:
                         stack[XREG] = Math.cos(stack[XREG] * Math.PI / 180);
@@ -958,16 +926,14 @@ public class HP15c extends JFrame implements Serializable {
                 }
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("tan", new Input("25", "TAN") {
+        operationMap.put("tan", new Input("tan", "TAN", "25", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 switch (angleMode) {
                     case DEG:
                         stack[XREG] = Math.tan(stack[XREG] * Math.PI / 180);
@@ -981,16 +947,14 @@ public class HP15c extends JFrame implements Serializable {
                 }
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("hsin", new Input("23", "HSIN") {
+        operationMap.put("hsin", new Input("hsin", "HSIN", "42,22,23", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 switch (angleMode) {
                     case DEG:
                         stack[XREG] = Math.sinh(stack[XREG] * Math.PI / 180);
@@ -1004,16 +968,14 @@ public class HP15c extends JFrame implements Serializable {
                 }
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("hcos", new Input("24", "HCOS") {
+        operationMap.put("hcos", new Input("hcos", "HCOS", "42,22,24", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 switch (angleMode) {
                     case DEG:
                         stack[XREG] = Math.cosh(stack[XREG] * Math.PI / 180);
@@ -1027,16 +989,14 @@ public class HP15c extends JFrame implements Serializable {
                 }
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("htan", new Input("25", "HTAN") {
+        operationMap.put("htan", new Input("htan", "HTAN", "42,22,25", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 switch (angleMode) {
                     case DEG:
                         stack[XREG] = Math.tanh(stack[XREG] * Math.PI / 180);
@@ -1050,16 +1010,14 @@ public class HP15c extends JFrame implements Serializable {
                 }
                 xRegisterString = "";
                 stackLift = true;
-                if (!programExecution) {
+                if (!programExecution)
                     display.drawBuffer(formatDisplay());
-                    printStack();
-                }
             }
         });
 
-        operationMap.put("int", new Input("44", "INT") {
+        operationMap.put("int", new Input("int", "INT", "43 44", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = Math.floor(stack[XREG]);
                 xRegisterString = "";
                 stackLift = true;
@@ -1068,9 +1026,9 @@ public class HP15c extends JFrame implements Serializable {
             }
         });
 
-        operationMap.put("frac", new Input("44", "FRAC") {
+        operationMap.put("frac", new Input("frac", "FRAC", "42 44", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 stack[XREG] = stack[XREG] - Math.floor(stack[XREG]);
                 xRegisterString = "";
                 stackLift = true;
@@ -1079,48 +1037,16 @@ public class HP15c extends JFrame implements Serializable {
             }
         });
 
-        operationMap.put("fix", new Input("17", "FIX") {
+        operationMap.put("fix", new Input("fix", "FIX", "42, 7, ", true, precisionValues) {
             @Override
-            public void input() {
-                removeKeyListener(mainListener);
-                addKeyListener(new KeyListener() {
-                    @Override
-                    public void keyReleased(KeyEvent e) {
-                        var inputChar = e.getKeyChar();
-                        if (!Character.isDigit(inputChar))
-                            return;
-                        if (programMode) {
-                            programMemory[++programIndex] = new ValuedInput("17", String.valueOf(inputChar), String.valueOf(inputChar)) {
-                                @Override
-                                public void input() {
-                                    displayMode = DisplayMode.FIX;
-                                    precision = Integer.parseInt(address);
-                                }
-                            };
-                            display.drawProgram(programIndex, programMemory[programIndex]);
-                        }
-                        else {
-                            displayMode = DisplayMode.FIX;
-                            precision = Character.getNumericValue(inputChar);
-                            display.drawBuffer(formatDisplay());
-                        }
-                        removeKeyListener(getKeyListeners()[0]);
-                        addKeyListener(mainListener);
-                    }
-
-                    @Override
-                    public void keyPressed(KeyEvent e) {
-
-                    }
-
-                    @Override
-                    public void keyTyped(KeyEvent e) {
-
-                    }
-                });
+            public void input(String value) {
+                displayMode = DisplayMode.FIX;
+                precision = Integer.parseInt(value);
+                if (!programExecution)
+                    display.drawBuffer(formatDisplay());
             }
         });
-
+/*
         operationMap.put("sci", new Input("18", "SCI") {
             @Override
             public void input() {
@@ -1261,11 +1187,11 @@ public class HP15c extends JFrame implements Serializable {
                 display.updateCommandDisplay(commandString);
             }
         });
-*/
+        */
         //program operations
-        operationMap.put("pr", new Input("pr", "PR", "50") {
+        operationMap.put("pr", new Input("pr", "PR", "50", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 programMode = !programMode;
                 if (programMode)
                     display.drawProgram(programIndex, programMemory[programIndex]);
@@ -1498,9 +1424,9 @@ public class HP15c extends JFrame implements Serializable {
             }
         });*/
 
-        controlOperationMap.put("\b", new Input("\b", "BACKSPACE", "35") {
+        controlOperationMap.put("\b", new Input("\b", "BACKSPACE", "35", false, null) {
             @Override
-            public void input() {
+            public void input(String nullString) {
                 if (!programMode) {
                     if (lastEntry == LastEntry.DIGIT) {
                         switch (xRegisterString.length()) {
@@ -1549,18 +1475,30 @@ public class HP15c extends JFrame implements Serializable {
             }
         });
 
-        controlOperationMap.put(" ", new Input(" ", "COMMAND ENTER", "00") {
+        controlOperationMap.put(" ", new Input(" ", "COMMAND ENTER", "00", false, null) {
             @Override
-            public void input() {
-                if (!commandString.isEmpty()) {
-                    if (programMode) {
-                        var operation = operationMap.get(display.getCommand());
-                        ProgramStep programStep = new ProgramStep(operation.key, false);
-                        programMemory[++programIndex] = programStep;
-                        display.drawProgram(programIndex, programStep);
-                    }
-                    else
-                        operationMap.get(display.getCommand()).input();
+            public void input(String nullString) {
+                if (commandString.equals(""))
+                    return;
+                var operationKey = display.getCommand();
+                if (!operationMap.containsKey(operationKey))
+                    return;
+                var operation = operationMap.get(display.getCommand());
+                if (operation.isValued) {
+                    awaitingInput = true;
+                    commandString = operationKey;
+                    display.updateCommandDisplay(commandString);
+                    return;
+                }
+                if (programMode) {
+                    ProgramStep programStep = new ProgramStep(operation.key, false);
+                    programMemory[++programIndex] = programStep;
+                    commandString = "";
+                    display.updateCommandDisplay(commandString);
+                    display.drawProgram(programIndex, programStep);
+                }
+                else {
+                    operation.input(null);
                     commandString = "";
                     display.updateCommandDisplay(commandString);
                 }
